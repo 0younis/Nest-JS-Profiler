@@ -536,4 +536,33 @@ export class ProfilerService {
   getRootEvents(): EventProfile[] {
     return this.getEventsList().filter((e) => !e.parentEventId);
   }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Exception Tracking
+  // ════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get all exceptions captured across all profiles, newest first.
+   * An exception is any request where `profile.exception` was set by the
+   * RequestProfilerInterceptor's error branch.
+   */
+  async getExceptionsList(): Promise<any[]> {
+    const profiles = await Promise.resolve(this.storage.all());
+    return profiles
+      .filter((p) => p.exception)
+      .map((p) => ({
+        requestId: p.id,
+        method: p.method,
+        url: p.url,
+        route: p.route,
+        statusCode: p.statusCode || 500,
+        timestamp: p.timestamp,
+        duration: p.duration,
+        message: p.exception!.message,
+        stack: p.exception!.stack,
+        controller: p.controller,
+        handler: p.handler,
+      }))
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }
 }

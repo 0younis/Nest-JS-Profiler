@@ -7,6 +7,8 @@ import type { QueryProfile } from '../common/profiler.model';
 export class MysqlCollector implements OnModuleInit {
     private logger = new Logger(MysqlCollector.name);
     private mysql: any;
+    /** Connection config captured from the first observed mysql2 query */
+    capturedConfig: Record<string, any> | null = null;
 
     constructor(
         private profiler: ProfilerService,
@@ -28,6 +30,35 @@ export class MysqlCollector implements OnModuleInit {
             } else {
                 this.logger.error('Failed to initialize MysqlCollector', e);
             }
+        }
+    }
+
+    /**
+     * Run a query against the same MySQL database using a temporary promise connection.
+     * Used by ErdService to query information_schema.
+     * Returns null if no connection has been observed yet.
+     */
+    async runSchemaQuery(sql: string): Promise<any[] | null> {
+        if (!this.capturedConfig || !this.mysql) return null;
+        try {
+            // mysql2/promise is a sub-export of mysql2
+            const mysqlPromise = this.mysql.createConnection
+                ? this.mysql
+                : require('mysql2/promise');
+            // createConnection returns a callback-based connection in core mysql2,
+            // but mysql2/promise returns a promise-based one. Try promise variant first.
+            let conn: any;
+            try {
+                conn = await require('mysql2/promise').createConnection(this.capturedConfig);
+            } catch {
+                return null;
+            }
+            const [rows] = await conn.execute(sql);
+            await conn.end();
+            return rows as any[];
+        } catch (err: any) {
+            this.logger.warn(`ERD schema query failed: ${err?.message}`);
+            return null;
         }
     }
 
@@ -54,6 +85,17 @@ export class MysqlCollector implements OnModuleInit {
             const host = config.host || 'localhost';
             const port = config.port || 3306;
             const connectionName = `${dbName}@${host}:${port}`;
+
+            // Capture connection config once for ERD schema queries
+            if (!self.capturedConfig && config.database) {
+                self.capturedConfig = {
+                    host:     config.host,
+                    port:     config.port || 3306,
+                    database: config.database,
+                    user:     config.user,
+                    password: config.password,
+                };
+            }
 
             let sql = '';
             let params: any[] = [];

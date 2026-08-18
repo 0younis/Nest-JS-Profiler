@@ -22,6 +22,7 @@ import { HealthService } from '../services/health.service';
 import { CodeQualityService } from '../services/code-quality.service';
 import { CronExplorerService } from '../services/cron-explorer.service';
 import { MemoryService } from '../services/memory.service';
+import { ErdService } from '../services/erd.service';
 import { ProfilerOptions } from '../common/profiler-options.interface';
 import { createHmac } from 'crypto';
 
@@ -37,6 +38,7 @@ export class ProfilerController {
     private readonly codeQualityService: CodeQualityService,
     private readonly cronExplorer: CronExplorerService,
     private readonly memoryService: MemoryService,
+    private readonly erdService: ErdService,
     @Optional() @Inject('PROFILER_OPTIONS') private readonly profilerOptions: ProfilerOptions,
   ) {}
 
@@ -455,6 +457,34 @@ export class ProfilerController {
       res.status(500).json({ success: false, message: 'Failed to stream snapshot' });
       fs.unlink(result.filePath, () => {});
     });
+  }
+
+  @Get('view/erd')
+  erdPage(@Res() res: Response) {
+    // Pass empty array — the client fetches data only when "Generate ERD" is clicked
+    const content = this.viewService.render('erd', { schemasJson: '[]' });
+    const html = this.renderLayout('ERD', content, 'erd');
+    res.header('Content-Type', 'text/html').send(html);
+  }
+
+  @Get('api/erd')
+  async erdApi() {
+    return this.erdService.getSchemas();
+  }
+
+  @Get('view/exceptions')
+  async exceptionsPage(@Res() res: Response) {
+    const html = this.renderLayout(
+      'Exceptions',
+      this.templateBuilder.buildExceptionsPage(),
+      'exceptions',
+    );
+    res.header('Content-Type', 'text/html').send(html);
+  }
+
+  @Get('api/exceptions')
+  async exceptionsApi() {
+    return this.profilerService.getExceptionsList();
   }
 
   @Get('assets/:file')

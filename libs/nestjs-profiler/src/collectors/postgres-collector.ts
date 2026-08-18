@@ -10,6 +10,10 @@ import { Client } from 'pg';
 export class PostgresCollector implements OnModuleInit {
     private logger = new Logger(PostgresCollector.name);
     private originalQuery: any;
+    /** Connection parameters captured from the first observed pg.Client query */
+    capturedConfig: Record<string, any> | null = null;
+    /** All named connection configs collected from TypeORM DataSources */
+    allCapturedConfigs: Array<{ label: string; config: Record<string, any> }> = [];
 
     constructor(
         private profiler: ProfilerService,
@@ -54,6 +58,20 @@ export class PostgresCollector implements OnModuleInit {
                 const dbName = (clientInstance as any).database || (clientInstance as any).connectionParameters?.database || 'unknown';
                 const dbHost = (clientInstance as any).host || (clientInstance as any).connectionParameters?.host || 'localhost';
                 connectionName = `${dbName}@${dbHost}`;
+
+                // Capture connection config once for ERD schema queries
+                if (!self.capturedConfig) {
+                    const cp = (clientInstance as any).connectionParameters;
+                    if (cp) {
+                        self.capturedConfig = {
+                            host:     cp.host,
+                            port:     cp.port,
+                            database: cp.database,
+                            user:     cp.user,
+                            password: cp.password,
+                        };
+                    }
+                }
 
                 if (typeof args[0] === 'string') {
                     queryText = args[0];
@@ -107,6 +125,27 @@ export class PostgresCollector implements OnModuleInit {
 
         (Client.prototype.query as any).__isPatched = true;
         this.logger.log('PostgreSQL Client.query successfully patched');
+    }
+
+    /**
+     * Run a query against the same PostgreSQL database using a temporary client.
+     * Used by ErdService to query information_schema.
+     * Returns null if no connection has been observed yet.
+     */
+    async runSchemaQuery(sql: string, params: any[] = []): Promise<any[] | null> {
+        if (!this.capturedConfig) return null;
+        const pgDriver = this.options.pgDriver || require('pg');
+        const client = new pgDriver.Client(this.capturedConfig);
+        try {
+            await client.connect();
+            const result = await this.originalQuery.call(client, sql, params);
+            await client.end();
+            return result.rows;
+        } catch (err: any) {
+            await client.end().catch(() => {});
+            this.logger.warn(`ERD schema query failed: ${err?.message}`);
+            return null;
+        }
     }
 
     private captureQuery(

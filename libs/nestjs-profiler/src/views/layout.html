@@ -222,6 +222,24 @@
                     </svg>
                     Memory
                 </a>
+                <a href="/__profiler/view/erd"
+                    class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ erdActive }}}">
+                    <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ erdIconClass }}}" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                    ERD
+                </a>
+                <a href="/__profiler/view/exceptions"
+                    class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ exceptionsActive }}}">
+                    <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ exceptionsIconClass }}}" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Exceptions
+                </a>
                 <a href="/__profiler/view/logs/live"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ liveLogsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ liveLogsIconClass }}}" fill="none" viewBox="0 0 24 24"
@@ -236,7 +254,7 @@
             <div class="flex-shrink-0 flex bg-slate-800 p-4 items-center justify-between">
                 <div class="flex items-center">
                     <div class="ml-1">
-                        <p class="text-xs font-medium text-white">v1.0.27</p>
+                        <p class="text-xs font-medium text-white">v1.0.29</p>
                         <p class="text-xs font-medium text-slate-300">nestjs-profiler</p>
                     </div>
                 </div>
@@ -377,7 +395,7 @@
             </script>
             <main class="flex-1">
                 <div class="py-6">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+                    <div id="page-content-wrapper" class="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
                         {{{ content }}}
                     </div>
                 </div>

@@ -249,6 +249,7 @@ Navigate to `/__profiler` after starting your app.
 | `/__profiler/view/events` | Event cascade tree for `EventEmitter2` emissions |
 | `/__profiler/view/cron-jobs` | Live scheduled job monitor — cron, intervals, and timeouts |
 | `/__profiler/view/memory` | Heap monitor — live chart, leak score, per-request memory deltas, GC and snapshot controls |
+| `/__profiler/view/exceptions` | All exceptions thrown across profiled requests — status, stack trace, controller/handler, and a link to the full request |
 | `/__profiler/:id` | Full detail view for a single request |
 
 ### JSON API
@@ -267,6 +268,7 @@ GET /__profiler/api/cron-jobs         # scheduled job state (live, not cached)
 GET /__profiler/api/memory            # current heap report + leak score + top request deltas
 POST /__profiler/api/memory/gc        # force GC (requires --expose-gc)
 POST /__profiler/api/memory/snapshot  # generate and download a .heapsnapshot file
+GET /__profiler/api/exceptions        # all captured exceptions (live, not cached)
 ```
 
 ---
@@ -424,6 +426,96 @@ Populated by `ProfilerModule.initialize(app)`. Lists every route grouped by cont
 - Source file path with a one-click copy button
 
 Works with `emitDecoratorMetadata: true` (standard in NestJS). No OpenAPI/Swagger required.
+
+### Exceptions Tab
+
+The Exceptions tab captures every unhandled exception thrown from a profiled request and surfaces it at `/__profiler/view/exceptions`. No configuration is needed — it is always on when the profiler is enabled.
+
+For each exception you see:
+
+- Status code badge (5xx in red, 4xx in amber), HTTP method badge, and endpoint URL
+- Error message and the controller/handler where the exception originated
+- Request duration and timestamp
+- Full stack trace with TypeScript source frames highlighted
+- **View Full Request** button linking to the complete request profile (`/__profiler/{requestId}`)
+
+Stats at the top of the page summarise total exceptions, 5xx count, and 4xx count. The list is searchable and ordered by most recent first.
+
+The raw exception list is also available as JSON:
+
+```
+GET /__profiler/api/exceptions
+```
+
+---
+
+### ERD — Raw Connection Registration
+
+By default the ERD tab builds its schema from TypeORM/MikroORM entity metadata or from connection configs captured during the first profiled query. If your app uses raw `pg.Pool` or `mysql2` connections without an ORM, you can register them directly with `ErdService` so the ERD works immediately on first page load, without needing a prior request to warm it up.
+
+**Inject `ErdService` and call the registration methods in `onModuleInit`:**
+
+```typescript
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { ErdService } from 'nestjs-profiler';
+import * as pg from 'pg';
+
+@Injectable()
+export class YourDbService implements OnModuleInit {
+  constructor(private readonly moduleRef: ModuleRef) {}
+
+  onModuleInit() {
+    // Use ModuleRef.get with strict: false so you don't need to import ProfilerModule
+    // into your own module — it looks up providers across the entire app container.
+    const erd = this.moduleRef.get(ErdService, { strict: false });
+
+    erd.registerPostgresConnection('PG: my_app_db', {
+      host: 'localhost',
+      port: 5432,
+      user: 'postgres',
+      password: 'secret',
+      database: 'my_app_db',
+    });
+
+    erd.registerMysqlConnection('MySQL: my_mysql_db', {
+      host: 'localhost',
+      port: 3306,
+      user: 'root',
+      password: 'secret',
+      database: 'my_mysql_db',
+    });
+  }
+}
+```
+
+Register as many connections as you like — each one appears as its own tab in the ERD. Labels are free-form strings and used as the tab title.
+
+**API reference:**
+
+```typescript
+// Register a raw pg connection config (does not require an active pg.Pool)
+erdService.registerPostgresConnection(label: string, config: {
+  host: string; port: number; user: string; password: string; database: string;
+}): void
+
+// Register a raw mysql2 connection config
+erdService.registerMysqlConnection(label: string, config: {
+  host: string; port: number; user: string; password: string; database: string;
+}): void
+```
+
+> **Note:** `mysql2` must be installed and `collectMysql: true` must be set in `ProfilerModule.forRoot` for MySQL connections to appear.
+
+```typescript
+ProfilerModule.forRoot({
+  enabled: process.env.NODE_ENV !== 'production',
+  collectMysql: true,
+  mysqlDriver: (() => { try { return require('mysql2'); } catch { return undefined; } })(),
+})
+```
+
+---
 
 ## License
 

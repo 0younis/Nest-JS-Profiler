@@ -29,6 +29,11 @@ export class TemplateBuilderService {
     return this.viewService.render('events', {});
   }
 
+  /** Build exceptions page shell — all data fetched client-side via /__profiler/api/exceptions */
+  buildExceptionsPage(): string {
+    return this.viewService.render('exceptions', {});
+  }
+
   /**
    * Build the summary/stats dashboard page
    */

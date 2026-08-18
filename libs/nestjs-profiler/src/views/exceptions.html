@@ -1,0 +1,337 @@
+<style>
+  .exc-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .exc-5xx { background: #fee2e2; color: #991b1b; }
+  .exc-4xx { background: #fef9c3; color: #92400e; }
+  .exc-row {
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .exc-row:hover { background: #f1f5f9; }
+  .exc-row.selected { background: #eff6ff; }
+  .stack-pre {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 11.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .stack-frame-highlight { color: #f8b84e; }
+  .detail-panel {
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+  }
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px 24px;
+    text-align: center;
+  }
+  .method-get    { background: #dbeafe; color: #1e40af; }
+  .method-post   { background: #dcfce7; color: #166534; }
+  .method-put    { background: #ffedd5; color: #9a3412; }
+  .method-patch  { background: #fef9c3; color: #92400e; }
+  .method-delete { background: #fee2e2; color: #991b1b; }
+  .method-other  { background: #f1f5f9; color: #475569; }
+  .search-input {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px 8px 36px;
+    font-size: 13px;
+    width: 280px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .search-input:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+  }
+</style>
+
+<div class="px-6 py-6 max-w-none">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-3">
+        <span class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-red-100">
+          <svg class="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </span>
+        Exceptions
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">All exceptions captured from profiled requests</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="relative">
+        <svg class="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        <input id="exc-search" type="text" placeholder="Search exceptions…" class="search-input" oninput="filterExceptions()">
+      </div>
+      <button onclick="loadExceptions()" class="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div id="exc-stats" class="grid grid-cols-3 gap-4 mb-6" style="display:none!important"></div>
+
+  <!-- Main layout: table + detail panel -->
+  <div id="exc-main" class="flex gap-6 items-start">
+    <!-- Table -->
+    <div class="flex-1 min-w-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div id="exc-loading" class="empty-state">
+        <svg class="animate-spin w-8 h-8 text-indigo-500 mb-3" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        <p class="text-slate-500 text-sm">Loading exceptions…</p>
+      </div>
+      <div id="exc-empty" class="empty-state" style="display:none">
+        <svg class="w-14 h-14 text-slate-200 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-slate-700 font-semibold text-base">No exceptions captured</p>
+        <p class="text-slate-400 text-sm mt-1">All profiled requests completed without errors.</p>
+      </div>
+      <table id="exc-table" class="min-w-full divide-y divide-slate-100" style="display:none">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-16">Status</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-20">Method</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Endpoint</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Exception Message</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-36">Time</th>
+          </tr>
+        </thead>
+        <tbody id="exc-tbody" class="bg-white divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+
+    <!-- Detail panel -->
+    <div id="exc-detail" class="detail-panel w-96 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" style="display:none">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+        <span class="text-sm font-semibold text-slate-700">Exception Detail</span>
+        <button onclick="closeDetail()" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div id="exc-detail-body" class="p-4 space-y-4 text-sm"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var _allExceptions = [];
+var _selectedId = null;
+
+function statusClass(code) {
+  if (code >= 500) return 'exc-5xx';
+  return 'exc-4xx';
+}
+
+function methodClass(m) {
+  var map = { GET:'method-get', POST:'method-post', PUT:'method-put', PATCH:'method-patch', DELETE:'method-delete' };
+  return 'exc-badge ' + (map[m] || 'method-other');
+}
+
+function timeAgo(ts) {
+  var s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+function highlightStack(stack) {
+  return escapeHtml(stack).replace(/(at\s+.+\(([^)]+\.ts[^)]*)\))/g, function(match, full, file) {
+    return '<span class="stack-frame-highlight">' + full + '</span>';
+  });
+}
+
+function renderRow(exc, idx) {
+  var sel = exc.requestId === _selectedId ? ' selected' : '';
+  var endpoint = escapeHtml(exc.route || exc.url || '—');
+  var msg = escapeHtml(exc.message || 'Unknown error');
+  var truncMsg = msg.length > 60 ? msg.substring(0, 60) + '…' : msg;
+  return '<tr class="exc-row' + sel + '" onclick="selectException(\'' + escapeHtml(exc.requestId) + '\')" data-idx="' + idx + '">' +
+    '<td class="px-4 py-3"><span class="exc-badge ' + statusClass(exc.statusCode) + '">' + exc.statusCode + '</span></td>' +
+    '<td class="px-4 py-3"><span class="' + methodClass(exc.method) + '">' + escapeHtml(exc.method) + '</span></td>' +
+    '<td class="px-4 py-3 text-slate-800 font-mono text-xs max-w-xs truncate" title="' + escapeHtml(exc.url || '') + '">' + endpoint + '</td>' +
+    '<td class="px-4 py-3 text-slate-600 text-xs max-w-xs" title="' + msg + '">' + truncMsg + '</td>' +
+    '<td class="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">' + timeAgo(exc.timestamp) + '</td>' +
+    '</tr>';
+}
+
+function filterExceptions() {
+  var q = (document.getElementById('exc-search').value || '').toLowerCase();
+  var filtered = q ? _allExceptions.filter(function(e) {
+    return (e.message || '').toLowerCase().includes(q) ||
+           (e.url || '').toLowerCase().includes(q) ||
+           (e.route || '').toLowerCase().includes(q) ||
+           (e.method || '').toLowerCase().includes(q) ||
+           String(e.statusCode).includes(q);
+  }) : _allExceptions;
+
+  var tbody = document.getElementById('exc-tbody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-10 text-center text-slate-400 text-sm">No exceptions match your search.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(renderRow).join('');
+}
+
+function selectException(requestId) {
+  _selectedId = requestId;
+  var exc = _allExceptions.find(function(e) { return e.requestId === requestId; });
+  if (!exc) return;
+
+  // Re-render rows to update selection highlight
+  filterExceptions();
+
+  // Build detail panel
+  var ts = new Date(exc.timestamp).toLocaleString(undefined, {
+    month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
+
+  var html =
+    '<div class="space-y-1">' +
+      '<div class="flex items-center gap-2">' +
+        '<span class="exc-badge ' + statusClass(exc.statusCode) + '">' + exc.statusCode + '</span>' +
+        '<span class="exc-badge ' + methodClass(exc.method) + '">' + escapeHtml(exc.method) + '</span>' +
+      '</div>' +
+      '<p class="font-mono text-xs text-slate-600 mt-2 break-all">' + escapeHtml(exc.url || '') + '</p>' +
+    '</div>' +
+
+    '<div>' +
+      '<p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Message</p>' +
+      '<p class="text-red-700 font-medium text-sm bg-red-50 rounded-lg px-3 py-2">' + escapeHtml(exc.message || 'Unknown error') + '</p>' +
+    '</div>';
+
+  if (exc.controller || exc.handler) {
+    html +=
+      '<div class="grid grid-cols-2 gap-3">' +
+        (exc.controller ? '<div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Controller</p><p class="text-xs text-slate-700 font-mono">' + escapeHtml(exc.controller) + '</p></div>' : '') +
+        (exc.handler    ? '<div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Handler</p><p class="text-xs text-slate-700 font-mono">' + escapeHtml(exc.handler) + '</p></div>' : '') +
+      '</div>';
+  }
+
+  html +=
+    '<div class="grid grid-cols-2 gap-3">' +
+      '<div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Duration</p>' +
+        '<p class="text-xs text-slate-700">' + (exc.duration != null ? exc.duration + ' ms' : '—') + '</p></div>' +
+      '<div><p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Timestamp</p>' +
+        '<p class="text-xs text-slate-700">' + escapeHtml(ts) + '</p></div>' +
+    '</div>';
+
+  if (exc.stack) {
+    html +=
+      '<div>' +
+        '<p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Stack Trace</p>' +
+        '<pre class="stack-pre">' + highlightStack(exc.stack) + '</pre>' +
+      '</div>';
+  }
+
+  html +=
+    '<div class="pt-1">' +
+      '<a href="/__profiler/' + escapeHtml(exc.requestId) + '" target="_blank" ' +
+        'class="inline-flex items-center gap-2 w-full justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">' +
+        '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>' +
+        '</svg>' +
+        'View Full Request' +
+      '</a>' +
+    '</div>';
+
+  document.getElementById('exc-detail-body').innerHTML = html;
+  document.getElementById('exc-detail').style.display = '';
+}
+
+function closeDetail() {
+  _selectedId = null;
+  document.getElementById('exc-detail').style.display = 'none';
+  filterExceptions();
+}
+
+async function loadExceptions() {
+  document.getElementById('exc-loading').style.display = '';
+  document.getElementById('exc-empty').style.display = 'none';
+  document.getElementById('exc-table').style.display = 'none';
+  document.getElementById('exc-stats').style.display = 'none';
+
+  try {
+    var r = await fetch('/__profiler/api/exceptions');
+    var data = await r.json();
+    _allExceptions = data || [];
+
+    if (_allExceptions.length === 0) {
+      document.getElementById('exc-loading').style.display = 'none';
+      document.getElementById('exc-empty').style.display = '';
+      return;
+    }
+
+    // Stats
+    var total = _allExceptions.length;
+    var count5xx = _allExceptions.filter(function(e) { return e.statusCode >= 500; }).length;
+    var count4xx = _allExceptions.filter(function(e) { return e.statusCode >= 400 && e.statusCode < 500; }).length;
+    var statsEl = document.getElementById('exc-stats');
+    statsEl.innerHTML =
+      '<div class="bg-white rounded-xl border border-red-100 p-4 shadow-sm">' +
+        '<p class="text-xs text-slate-500 font-medium uppercase tracking-wide">Total</p>' +
+        '<p class="text-2xl font-bold text-slate-900 mt-1">' + total + '</p>' +
+      '</div>' +
+      '<div class="bg-white rounded-xl border border-red-100 p-4 shadow-sm">' +
+        '<p class="text-xs text-slate-500 font-medium uppercase tracking-wide">5xx Server Errors</p>' +
+        '<p class="text-2xl font-bold text-red-600 mt-1">' + count5xx + '</p>' +
+      '</div>' +
+      '<div class="bg-white rounded-xl border border-yellow-100 p-4 shadow-sm">' +
+        '<p class="text-xs text-slate-500 font-medium uppercase tracking-wide">4xx Client Errors</p>' +
+        '<p class="text-2xl font-bold text-amber-600 mt-1">' + count4xx + '</p>' +
+      '</div>';
+    statsEl.style.removeProperty('display');
+
+    document.getElementById('exc-loading').style.display = 'none';
+    document.getElementById('exc-table').style.display = '';
+    filterExceptions();
+  } catch(e) {
+    document.getElementById('exc-loading').style.display = 'none';
+    document.getElementById('exc-table').style.display = '';
+    document.getElementById('exc-tbody').innerHTML =
+      '<tr><td colspan="5" class="px-4 py-10 text-center text-red-500 text-sm">Failed to load exceptions: ' + escapeHtml(String(e)) + '</td></tr>';
+  }
+}
+
+loadExceptions();
+</script>

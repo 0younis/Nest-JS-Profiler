@@ -31,6 +31,7 @@ import { ProfilerLogger } from './profiler-logger';
 import { ProfilerMiddleware } from './middleware/profiler.middleware';
 import { CronExplorerService } from './services/cron-explorer.service';
 import { MemoryService } from './services/memory.service';
+import { ErdService } from './services/erd.service';
 
 @Global()
 @Module({
@@ -44,8 +45,9 @@ import { MemoryService } from './services/memory.service';
     RouteExplorerService,
     CronExplorerService,
     MemoryService,
+    ErdService,
   ],
-  exports: [ProfilerService, EntityExplorerService, RouteExplorerService, CronExplorerService, MemoryService],
+  exports: [ProfilerService, EntityExplorerService, RouteExplorerService, CronExplorerService, MemoryService, ErdService],
 })
 export class ProfilerModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
@@ -92,13 +94,14 @@ export class ProfilerModule implements NestModule {
         CodeQualityService,
         CronExplorerService,
         MemoryService,
+        ErdService,
         ExplainAnalyzer,
         {
           provide: APP_INTERCEPTOR,
           useClass: RequestProfilerInterceptor,
         },
       ],
-      exports: [ProfilerService, MemoryService],
+      exports: [ProfilerService, MemoryService, ErdService],
     };
   }
 
@@ -237,5 +240,52 @@ export class ProfilerModule implements NestModule {
     } catch {
       // EventCollector not available or @nestjs/event-emitter not installed — skip silently
     }
+
+    // ── ERD — seed PostgresCollector from all TypeORM DataSources ────────────
+    // Scan every DataSource in the DI container (there may be several — one per
+    // named connection) and collect them all so ErdService can show a tab per DB.
+    try {
+      const pgCollector = app.get(PostgresCollector);
+      const container = app.container;
+      const modulesContainer = container.getModules();
+      const seen = new Set<string>();
+
+      for (const mod of modulesContainer.values()) {
+        for (const wrapper of (mod as any).providers?.values() ?? []) {
+          const inst = wrapper?.instance;
+          if (!inst || inst.constructor?.name !== 'DataSource') continue;
+          const opts = inst.options;
+          if (!opts || opts.type !== 'postgres') continue;
+
+          const cfg = {
+            host:     opts.host     || 'localhost',
+            port:     parseInt(String(opts.port || 5432)),
+            database: opts.database as string,
+            user:     opts.username || opts.user,
+            password: opts.password,
+            ...(opts.ssl !== undefined        ? { ssl: opts.ssl }       : {}),
+            ...(opts.extra?.ssl !== undefined  ? { ssl: opts.extra.ssl } : {}),
+          };
+
+          // Deduplicate by host+database
+          const key = `${cfg.host}:${cfg.port}/${cfg.database}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          // Human-readable label: use the TypeORM connection name if available
+          const connName: string = (inst as any).name || opts.name || '';
+          const label = connName && connName !== 'default'
+            ? `${connName} (${cfg.database})`
+            : cfg.database || 'PostgreSQL';
+
+          pgCollector.allCapturedConfigs.push({ label, config: cfg });
+
+          // Keep capturedConfig pointing at the first one for backwards-compat
+          if (!pgCollector.capturedConfig) {
+            pgCollector.capturedConfig = cfg;
+          }
+        }
+      }
+    } catch { /* PostgresCollector not registered or TypeORM not used — skip */ }
   }
 }

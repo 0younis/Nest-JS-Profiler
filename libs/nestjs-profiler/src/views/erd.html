@@ -1,0 +1,778 @@
+<script>
+  // ── Data injected from server ──────────────────────────────────────────────
+  const ERD_SCHEMAS = (function() {
+    try { return JSON.parse('{{{ schemasJson }}}'); } catch(e) { return []; }
+  })();
+</script>
+
+<!-- Break out of the layout's max-w-7xl / padding so the ERD fills the full width -->
+<style>
+  /* Remove the content wrapper's horizontal constraints for the ERD page */
+  #page-content-wrapper {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    overflow-x: hidden !important;
+  }
+  /* Prevent the page body from growing wider than the viewport */
+  body { overflow-x: hidden !important; }
+
+  /* ERD header, tabs, empty-state still get padding so they look aligned */
+  .erd-header-row {
+    padding: 0 2rem;
+  }
+
+  /* Loader spinner — hidden by default, shown only while generating */
+  @keyframes erd-spin { to { transform: rotate(360deg); } }
+  .erd-spinner {
+    display: none;
+    width: 15px; height: 15px;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: erd-spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+</style>
+
+<div class="space-y-4">
+
+  <!-- Header (padded) -->
+  <div class="erd-header-row flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Entity Relationship Diagram</h1>
+      <p class="mt-1 text-sm text-gray-500">
+        Database schema visualised from <code class="bg-gray-100 px-1 rounded">information_schema</code>.
+        Uses the existing TypeORM connection.
+      </p>
+    </div>
+    <div class="flex flex-col items-end gap-1">
+      <button id="erd-generate-btn" onclick="refreshErd()"
+        class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+        <span class="erd-btn-icon inline-flex items-center gap-2">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+          </svg>
+          Generate ERD
+        </span>
+        <span class="erd-spinner"></span>
+        <span class="erd-btn-loading-text" style="display:none">Generating…</span>
+      </button>
+      <span id="erd-last-generated" style="display:none;font-size:0.7rem;color:#94a3b8;"></span>
+    </div>
+  </div>
+
+  <!-- Empty state (padded) — visible by default until user generates -->
+  <div id="erd-empty" class="text-center py-20 erd-header-row">
+    <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+    </svg>
+    <p class="mt-4 text-lg font-medium text-gray-900">Ready to generate</p>
+    <p class="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
+      Click <strong>Generate ERD</strong> above to query your database schema and render the diagram.
+    </p>
+  </div>
+
+  <!-- Tabs + diagrams (full-width, no padding) -->
+  <div id="erd-content" class="hidden">
+
+    <!-- Tab bar (only shown when > 1 source) -->
+    <div id="erd-tabs" class="hidden border-b border-gray-200 mb-4 erd-header-row">
+      <nav class="-mb-px flex space-x-6" id="tab-nav"></nav>
+    </div>
+
+    <!-- Schema panels -->
+    <div id="schema-panels"></div>
+
+  </div>
+</div>
+
+<!-- Fullscreen modal -->
+<div id="erd-modal">
+  <div id="erd-modal-header">
+    <span id="erd-modal-title">ERD — Full View</span>
+    <div id="erd-modal-controls">
+      <button class="modal-zoom-btn" onclick="modalZoom(1.2)" title="Zoom in">+</button>
+      <button class="modal-zoom-btn" onclick="modalZoom(0.83)" title="Zoom out">−</button>
+      <button class="modal-zoom-btn" onclick="modalZoom(null)" title="Fit to screen" style="font-size:11px;width:auto;padding:0 8px;">Fit</button>
+      <button class="modal-zoom-btn" onclick="modalZoom(1, true)" title="Reset 1:1" style="font-size:11px;width:auto;padding:0 8px;">1:1</button>
+      <button id="erd-modal-close" onclick="closeModal()" title="Close (Esc)">✕</button>
+    </div>
+  </div>
+  <div id="erd-modal-wrap">
+    <div id="erd-modal-inner"></div>
+  </div>
+</div>
+
+<style>
+  .erd-panel { display: none; }
+  .erd-panel.active { display: block; }
+
+  /* Full-width ERD layout — stretches edge-to-edge, fills remaining viewport */
+  .erd-layout {
+    display: flex;
+    /*
+      100vh minus:
+        nav top-bar (0 — fixed sidebar, not a top bar)
+        py-6 on the outer wrapper (1.5rem top + 1.5rem bottom = 3rem)
+        page header ~80px + tabs ~44px + spacing ~24px = ~148px
+    */
+    height: calc(100vh - 200px);
+    min-height: 480px;
+    gap: 0;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    overflow: hidden;
+    background: white;
+  }
+
+  /* Left sidebar */
+  .erd-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+  }
+  .erd-sidebar-header {
+    padding: 12px 14px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+  }
+  .erd-sidebar-header h3 {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+    margin: 0 0 4px 0;
+  }
+  .erd-sidebar-stats {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .erd-stat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #475569;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .erd-sidebar-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .erd-sidebar-list::-webkit-scrollbar { width: 4px; }
+  .erd-sidebar-list::-webkit-scrollbar-track { background: transparent; }
+  .erd-sidebar-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+  .erd-table-btn {
+    width: 100%;
+    text-align: left;
+    font-size: 0.76rem;
+    color: #475569;
+    padding: 5px 8px;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.1s, color 0.1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .erd-table-btn:hover { background: #e8f0fe; color: #3730a3; }
+  .erd-table-btn::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 2px;
+    background: #c7d2fe;
+    flex-shrink: 0;
+  }
+
+  /* Right diagram area */
+  .erd-diagram-area {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .erd-diagram-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f1f5f9;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .erd-toolbar-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+  .erd-toolbar-btns {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .erd-toolbar-spacer { display: none; }
+
+  /* Zoom/pan container */
+  .diagram-wrap {
+    flex: 1;
+    overflow: auto;
+    background: #f8fafc;
+    cursor: grab;
+    position: relative;
+    min-height: 0;
+  }
+  .diagram-wrap:active { cursor: grabbing; }
+  .diagram-inner {
+    display: block;
+    width: 100%;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .diagram-inner svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: none;
+  }
+
+  /* Toolbar action button */
+  .zoom-btn {
+    height: 30px;
+    background: white;
+    border: 1.5px solid #6b7280;
+    border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0 10px;
+    gap: 4px;
+    color: #111827;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    user-select: none;
+    transition: background 0.1s;
+    flex-shrink: 0;
+  }
+  .zoom-btn.primary { background: #4f46e5; color: white; border-color: #4f46e5; }
+  .zoom-btn.primary:hover { background: #4338ca; }
+
+  /* Source badge */
+  .source-badge-postgresql { background: #dbeafe; color: #1e40af; }
+  .source-badge-mysql      { background: #ffedd5; color: #9a3412; }
+  .source-badge-entities   { background: #f3e8ff; color: #6b21a8; }
+
+  /* Warn banner */
+  .erd-warn {
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-radius: 0.5rem;
+    padding: 12px 16px;
+    color: #92400e;
+    font-size: 0.875rem;
+  }
+
+  /* Fullscreen modal */
+  #erd-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,0.85);
+    flex-direction: column;
+  }
+  #erd-modal.open { display: flex; }
+  #erd-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: #1e293b;
+    color: white;
+    flex-shrink: 0;
+  }
+  #erd-modal-title { font-size: 0.9rem; font-weight: 600; color: #e2e8f0; }
+  #erd-modal-controls { display: flex; gap: 6px; align-items: center; }
+  #erd-modal-wrap {
+    flex: 1;
+    overflow: auto;
+    cursor: grab;
+    background: #0f172a;
+    position: relative;
+  }
+  #erd-modal-wrap:active { cursor: grabbing; }
+  #erd-modal-inner {
+    display: block;
+    padding: 40px;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  #erd-modal-inner svg {
+    display: block;
+    max-width: none !important;
+    height: auto !important;
+  }
+  .modal-zoom-btn {
+    width: 34px; height: 34px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    color: white;
+    user-select: none;
+  }
+  .modal-zoom-btn:hover { background: rgba(255,255,255,0.2); }
+  #erd-modal-close {
+    width: 34px; height: 34px;
+    background: rgba(239,68,68,0.2);
+    border: 1px solid rgba(239,68,68,0.4);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    color: #fca5a5;
+    user-select: none;
+    margin-left: 8px;
+  }
+  #erd-modal-close:hover { background: rgba(239,68,68,0.4); }
+</style>
+
+<script>
+// ── Mermaid loader (idempotent — safe on SPA re-navigation) ─────────────────
+// Instead of a <script src="..."> tag (which reExecScripts re-fires async and
+// races with this inline script), we load Mermaid once via a dynamic element
+// and resolve immediately on subsequent visits where window.mermaid is already
+// present. This eliminates the "mermaid is not defined" ReferenceError.
+function loadMermaid() {
+  // Use window._mermaidReadyPromise so the cached promise survives SPA
+  // re-execution of this script block (var declarations reset, window doesn't).
+  if (window._mermaidReadyPromise) return window._mermaidReadyPromise;
+  window._mermaidReadyPromise = new Promise(function(resolve) {
+    if (typeof mermaid !== 'undefined') { resolve(); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+    s.onload = function() {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        er: { diagramPadding: 40, layoutDirection: 'TB', minEntityWidth: 100, minEntityHeight: 75, entityPadding: 15 },
+        securityLevel: 'loose',
+        fontFamily: 'Inter, system-ui, sans-serif',
+      });
+      resolve();
+    };
+    document.head.appendChild(s);
+  });
+  return window._mermaidReadyPromise;
+}
+
+// ── ERD localStorage cache (TTL: 1 day) ───────────────────────────────────
+var ERD_CACHE_KEY = 'nestjs_profiler_erd';
+var ERD_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function saveErdCache(schemas) {
+  try {
+    localStorage.setItem(ERD_CACHE_KEY, JSON.stringify({ schemas, ts: Date.now() }));
+  } catch(e) { /* storage full */ }
+}
+
+function loadErdCache() {
+  try {
+    const raw = localStorage.getItem(ERD_CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.schemas || !data.ts) return null;
+    if (Date.now() - data.ts > ERD_CACHE_TTL) { localStorage.removeItem(ERD_CACHE_KEY); return null; }
+    return data;
+  } catch(e) { return null; }
+}
+
+function formatCacheTs(ts) {
+  return 'Last generated: ' + new Date(ts).toLocaleString(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function showCacheTs(ts) {
+  const el = document.getElementById('erd-last-generated');
+  if (el) { el.textContent = formatCacheTs(ts); el.style.display = 'inline'; }
+}
+
+var activeTab = 0;
+
+// ── Zoom & pan state per panel ─────────────────────────────────────────────
+var panState = {};
+
+function initPanZoom(wrapId, innerId) {
+  const wrap = document.getElementById(wrapId);
+  const inner = document.getElementById(innerId);
+  if (!wrap || !inner) return;
+
+  let startX = 0, startY = 0, scrollLeft = 0, scrollTop = 0, dragging = false;
+
+  wrap.addEventListener('mousedown', (e) => {
+    dragging = true;
+    startX = e.pageX - wrap.offsetLeft;
+    startY = e.pageY - wrap.offsetTop;
+    scrollLeft = wrap.scrollLeft;
+    scrollTop  = wrap.scrollTop;
+  });
+  document.addEventListener('mouseup', () => { dragging = false; });
+  wrap.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    e.preventDefault();
+    const x = e.pageX - wrap.offsetLeft;
+    const y = e.pageY - wrap.offsetTop;
+    wrap.scrollLeft = scrollLeft - (x - startX);
+    wrap.scrollTop  = scrollTop  - (y - startY);
+  });
+}
+
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(idx) {
+  activeTab = idx;
+  document.querySelectorAll('.erd-panel').forEach((p, i) => {
+    p.classList.toggle('active', i === idx);
+  });
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('border-indigo-600', i === idx);
+    b.classList.toggle('text-indigo-700',   i === idx);
+    b.classList.toggle('border-transparent', i !== idx);
+    b.classList.toggle('text-gray-500',      i !== idx);
+  });
+}
+
+// ── Count cardinalities ────────────────────────────────────────────────────
+function countCardinalities(schema) {
+  const one2one = (schema.relations || []).filter(r => r.cardinality === '1:1').length;
+  const one2many = (schema.relations || []).filter(r => r.cardinality === '1:N').length;
+  return { one2one, one2many };
+}
+
+// ── Build sidebar ─────────────────────────────────────────────────────────
+function buildSidebar(schema, idx) {
+  const { one2one, one2many } = countCardinalities(schema);
+  const sourceBadge = schema.source === 'postgresql' ? 'PostgreSQL'
+    : schema.source === 'mysql' ? 'MySQL' : 'ORM Entities';
+
+  const tableItems = schema.tables.map(t => `
+    <button class="erd-table-btn" onclick="scrollToTable_${idx}('${t.name}')" title="${t.name}">
+      ${t.name}
+    </button>`).join('');
+
+  return `
+    <div class="erd-sidebar">
+      <div class="erd-sidebar-header">
+        <h3>${sourceBadge}</h3>
+        <div class="erd-sidebar-stats">
+          <span class="erd-stat-chip">🗂 ${schema.tableCount} tables</span>
+          ${one2many > 0 ? `<span class="erd-stat-chip">1:N ${one2many}</span>` : ''}
+          ${one2one  > 0 ? `<span class="erd-stat-chip">1:1 ${one2one}</span>`  : ''}
+        </div>
+      </div>
+      <div class="erd-sidebar-list">${tableItems}</div>
+    </div>`;
+}
+
+// ── Main render ────────────────────────────────────────────────────────────
+async function renderSchemas() {
+  await loadMermaid();
+  const schemas = ERD_SCHEMAS;
+
+  if (!schemas || schemas.length === 0) {
+    document.getElementById('erd-empty').classList.remove('hidden');
+    document.getElementById('erd-content').classList.add('hidden');
+    return;
+  }
+
+  document.getElementById('erd-empty').classList.add('hidden');
+  document.getElementById('erd-content').classList.remove('hidden');
+
+  // Tabs (only if > 1 source)
+  const tabNav = document.getElementById('tab-nav');
+  if (schemas.length > 1) {
+    document.getElementById('erd-tabs').classList.remove('hidden');
+    tabNav.innerHTML = schemas.map((s, i) => `
+      <button class="tab-btn whitespace-nowrap pb-3 px-1 border-b-2 text-sm font-medium transition-colors ${i === 0 ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+        onclick="switchTab(${i})">
+        ${s.label}
+      </button>`).join('');
+  }
+
+  // Panels
+  const panelsEl = document.getElementById('schema-panels');
+  panelsEl.innerHTML = schemas.map((s, i) => `
+    <div class="erd-panel ${i === 0 ? 'active' : ''}" id="panel-${i}">
+      ${s.error ? `<div class="erd-warn mb-3">⚠️ ${s.error}</div>` : ''}
+      ${s.tableCount > 0 ? `
+        <div class="erd-layout">
+          ${buildSidebar(s, i)}
+          <div class="erd-diagram-area">
+            <div class="erd-diagram-toolbar">
+              <span class="erd-toolbar-label">${s.label}</span>
+              <div class="erd-toolbar-btns">
+                <button class="zoom-btn primary" onclick="openModal(${i})" title="Open fullscreen" style="font-size:11px;padding:0 10px;gap:4px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+                  Full
+                </button>
+              </div>
+            </div>
+            <div class="diagram-wrap" id="wrap-${i}">
+              <div class="diagram-inner" id="inner-${i}">
+                <div id="mermaid-${i}" class="mermaid"></div>
+              </div>
+            </div>
+          </div>
+        </div>` : `
+        <div class="flex items-center justify-center h-48 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+          <p class="text-gray-400 text-sm">No tables to display</p>
+        </div>`}
+    </div>`).join('');
+
+  // Render Mermaid diagrams
+  for (let i = 0; i < schemas.length; i++) {
+    const s = schemas[i];
+    if (s.tableCount === 0) continue;
+    const el = document.getElementById(`mermaid-${i}`);
+    if (!el) continue;
+    try {
+      // Use a unique ID each render to avoid Mermaid's duplicate-ID error
+      // on SPA re-navigation (it caches processed IDs internally).
+      const { svg } = await mermaid.render(`erd-svg-${i}-${Date.now()}`, s.mermaid);
+      el.innerHTML = svg;
+
+      const svgEl = el.querySelector('svg');
+      if (svgEl) {
+        svgEl.setAttribute('width', '100%');
+        svgEl.removeAttribute('height');
+        svgEl.style.width  = '100%';
+        svgEl.style.height = 'auto';
+        svgEl.style.minWidth = '';
+        panState[`wrap-${i}`] = { scale: 1 };
+      }
+
+      initPanZoom(`wrap-${i}`, `inner-${i}`);
+
+      // Register scroll-to-table helper for this panel
+      window[`scrollToTable_${i}`] = function(tableName) {
+        const wrap = document.getElementById(`wrap-${i}`);
+        if (!wrap) return;
+        // Find the rect element inside the SVG that corresponds to the table
+        const svg = wrap.querySelector('svg');
+        if (!svg) return;
+        // Mermaid labels the entity group with the table name
+        const texts = svg.querySelectorAll('text');
+        for (const t of texts) {
+          if (t.textContent.trim() === tableName) {
+            const bbox = t.getBoundingClientRect();
+            const wrapBox = wrap.getBoundingClientRect();
+            const scale = panState[`wrap-${i}`]?.scale || 1;
+            const svgBox = svg.getBoundingClientRect();
+            wrap.scrollLeft = (bbox.left - svgBox.left) / scale - 40;
+            wrap.scrollTop  = (bbox.top  - svgBox.top)  / scale - 40;
+            break;
+          }
+        }
+      };
+    } catch (err) {
+      console.error('[ERD] Mermaid render error for schema', i, err);
+      el.innerHTML = `<pre class="text-xs text-red-600 bg-red-50 p-4 rounded overflow-auto">${s.mermaid}</pre>
+        <p class="text-xs text-red-500 mt-2">Render error: ${err.message}</p>`;
+    }
+  }
+}
+
+// ── Generate / Refresh ERD ─────────────────────────────────────────────────
+function setErdBtnLoading(loading) {
+  const btn   = document.getElementById('erd-generate-btn');
+  const icon  = btn?.querySelector('.erd-btn-icon');
+  const spin  = btn?.querySelector('.erd-spinner');
+  const label = btn?.querySelector('.erd-btn-loading-text');
+  if (!btn) return;
+  btn.disabled = loading;
+  if (icon)  icon.style.display  = loading ? 'none'         : 'inline-flex';
+  if (spin)  spin.style.display  = loading ? 'inline-block' : 'none';
+  if (label) label.style.display = loading ? 'inline'       : 'none';
+}
+
+async function refreshErd() {
+  setErdBtnLoading(true);
+  try {
+    const res = await fetch('/__profiler/api/erd');
+    const fresh = await res.json();
+
+    if (!document.getElementById('schema-panels')) return;
+
+    ERD_SCHEMAS.length = 0;
+    fresh.forEach(s => ERD_SCHEMAS.push(s));
+    document.getElementById('schema-panels').innerHTML = '';
+    document.getElementById('tab-nav').innerHTML = '';
+    document.getElementById('erd-tabs').classList.add('hidden');
+    await renderSchemas();
+    const targetTab = typeof activeTab !== 'undefined' && activeTab < fresh.length ? activeTab : 0;
+    switchTab(targetTab);
+
+    // Persist to localStorage with current timestamp
+    const now = Date.now();
+    saveErdCache(fresh);
+    showCacheTs(now);
+  } catch (e) {
+    alert('Failed to generate ERD: ' + e.message);
+  } finally {
+    setErdBtnLoading(false);
+  }
+}
+
+// ── Fullscreen modal ───────────────────────────────────────────────────────
+var modalScale = 1;
+var modalDragging = false, modalStartX = 0, modalStartY = 0, modalScrollLeft = 0, modalScrollTop = 0;
+var modalNaturalW = 800;
+
+function openModal(i) {
+  const srcSvg = document.querySelector(`#mermaid-${i} svg`);
+  if (!srcSvg) return;
+
+  const modal     = document.getElementById('erd-modal');
+  const inner     = document.getElementById('erd-modal-inner');
+  const wrap      = document.getElementById('erd-modal-wrap');
+  const title     = document.getElementById('erd-modal-title');
+
+  // Clone the SVG so the original stays intact
+  const cloned = srcSvg.cloneNode(true);
+  inner.innerHTML = '';
+  inner.appendChild(cloned);
+
+  // Read natural dimensions from viewBox; set SVG to natural width so fit works
+  const vb = cloned.getAttribute('viewBox');
+  if (vb) {
+    const parts = vb.trim().split(/[\s,]+/);
+    if (parts.length >= 4) {
+      modalNaturalW = Math.max(parseFloat(parts[2]) || 800, 100);
+    }
+  }
+  cloned.style.width = modalNaturalW + 'px';
+  cloned.setAttribute('width', modalNaturalW + 'px');
+  cloned.style.height = 'auto';
+  cloned.removeAttribute('height');
+
+  // Update title
+  const schema = ERD_SCHEMAS[i];
+  title.textContent = (schema?.label || 'ERD') + ' — Full View';
+
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Auto-fit on open
+  requestAnimationFrame(() => {
+    modalZoom(null);
+    wrap.scrollTo(0, 0);
+  });
+
+  // Pan
+  wrap.onmousedown = (e) => {
+    modalDragging = true;
+    modalStartX = e.pageX - wrap.offsetLeft;
+    modalStartY = e.pageY - wrap.offsetTop;
+    modalScrollLeft = wrap.scrollLeft;
+    modalScrollTop  = wrap.scrollTop;
+  };
+  document.onmouseup = () => { modalDragging = false; };
+  wrap.onmousemove = (e) => {
+    if (!modalDragging) return;
+    e.preventDefault();
+    wrap.scrollLeft = modalScrollLeft - (e.pageX - wrap.offsetLeft - modalStartX);
+    wrap.scrollTop  = modalScrollTop  - (e.pageY - wrap.offsetTop  - modalStartY);
+  };
+
+  // Wheel zoom
+  wrap.onwheel = (e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    modalZoom(factor);
+  };
+}
+
+function closeModal() {
+  document.getElementById('erd-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function modalZoom(factor, reset) {
+  const inner = document.getElementById('erd-modal-inner');
+  const wrap  = document.getElementById('erd-modal-wrap');
+  const svgEl = inner?.querySelector('svg');
+  if (!svgEl || !wrap) return;
+
+  if (reset) {
+    // 1:1 — natural size
+    svgEl.style.width = modalNaturalW + 'px';
+    svgEl.setAttribute('width', modalNaturalW + 'px');
+    modalScale = 1;
+  } else if (factor === null) {
+    // Fit to available modal width
+    const availW = wrap.clientWidth - 80;
+    svgEl.style.width = availW + 'px';
+    svgEl.setAttribute('width', availW + 'px');
+    modalScale = availW / modalNaturalW;
+  } else {
+    modalScale = Math.min(Math.max(modalScale * factor, 0.1), 10);
+    const newW = modalNaturalW * modalScale;
+    svgEl.style.width = newW + 'px';
+    svgEl.setAttribute('width', newW + 'px');
+  }
+  svgEl.style.height = 'auto';
+  svgEl.removeAttribute('height');
+}
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+// On load: restore from localStorage cache (if within 1-day TTL), otherwise
+// show empty state. User can always click Generate ERD to refresh.
+// loadMermaid() is awaited inside renderSchemas(), so the CDN is always ready
+// before any mermaid.render() call — even on SPA re-navigation.
+(async function boot() {
+  const cached = loadErdCache();
+  if (!cached) return; // no valid cache — show empty state, wait for user
+
+  ERD_SCHEMAS.length = 0;
+  cached.schemas.forEach(s => ERD_SCHEMAS.push(s));
+  await renderSchemas(); // renderSchemas awaits loadMermaid() internally
+  switchTab(0);
+  showCacheTs(cached.ts);
+})();
+</script>
