@@ -204,7 +204,7 @@
     window.__evAbort = new AbortController();
     setState('evLoading');
     try {
-      const res = await fetch('/__profiler/api/events', { signal: window.__evAbort.signal });
+      const res = await fetch('__profiler/api/events', { signal: window.__evAbort.signal });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       allEvents = await res.json();
       window.__evCache = allEvents;

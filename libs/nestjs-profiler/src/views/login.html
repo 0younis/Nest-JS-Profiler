@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
+  <script>
+  (function () {
+    var marker = '/__profiler';
+    var index = location.pathname.lastIndexOf(marker);
+    var base = document.createElement('base');
+    base.href = index < 0 ? '/' : location.pathname.slice(0, index + 1);
+    document.head.appendChild(base);
+  })();
+  </script>
   <!-- If already authenticated, skip login immediately -->
   <script>
   (function () {
@@ -8,7 +17,7 @@
     try { stored = localStorage.getItem('__profiler_auth'); data = stored ? JSON.parse(stored) : null; } catch (e) { data = null; }
     if (data && data.expiresAt && Date.now() < data.expiresAt) {
       var params = new URLSearchParams(location.search);
-      location.replace(params.get('returnTo') || '/__profiler');
+      location.replace(params.get('returnTo') || '__profiler');
     }
   })();
   </script>
@@ -173,7 +182,7 @@
 
   <script>
   (function () {
-    var returnTo = (new URLSearchParams(location.search)).get('returnTo') || '/__profiler';
+    var returnTo = (new URLSearchParams(location.search)).get('returnTo') || '__profiler';
 
     // ── Toggle password visibility ──────────────────────────────────────────
     var pwdInput   = document.getElementById('password');
@@ -232,7 +241,7 @@
 
       setLoading(true);
 
-      fetch('/__profiler/api/login', {
+      fetch('__profiler/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username, password: password }),

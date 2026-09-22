@@ -1,6 +1,8 @@
 import { ProfilerController } from '../../../../libs/nestjs-profiler/src/controllers/profiler.controller';
 import type { Response } from 'express';
 
+jest.mock('pg', () => ({}), { virtual: true });
+
 describe('ProfilerController', () => {
   const profilerService = {
     getDashboardData: jest.fn().mockResolvedValue([]),
@@ -24,6 +26,7 @@ describe('ProfilerController', () => {
       totalLogs: 0,
     }),
     getCacheList: jest.fn().mockResolvedValue([]),
+    getSummaryStats: jest.fn().mockResolvedValue({}),
   } as any;
 
   const templateBuilder = {
@@ -35,6 +38,7 @@ describe('ProfilerController', () => {
     buildCacheList: jest.fn().mockReturnValue('<C/>'),
     buildDetail: jest.fn().mockReturnValue('<DETAIL/>'),
     buildNotFound: jest.fn().mockReturnValue('<NOTFOUND/>'),
+    buildSummaryPage: jest.fn().mockReturnValue('<SUMMARY/>'),
   } as any;
 
   const entityExplorer = { getEntities: jest.fn().mockReturnValue([]) } as any;
@@ -103,6 +107,21 @@ describe('ProfilerController', () => {
     expect(detail).toEqual({ id: '1' });
   });
 
+  it('logout preserves the public path prefix', async () => {
+    const ctrl = new ProfilerController(
+      profilerService,
+      viewService,
+      templateBuilder,
+      entityExplorer,
+      routeExplorer,
+    );
+    const ctx = makeRes();
+    await ctrl.logout(ctx.res);
+    expect(ctx.body).toContain(
+      "location.pathname.replace('/logout', '/login')",
+    );
+  });
+
   it('detail returns 404 layout when not found', async () => {
     const ps = {
       ...profilerService,
@@ -119,9 +138,11 @@ describe('ProfilerController', () => {
     await ctrl.detail('missing', ctx.res);
     expect(ctx.statusCode).toBe(404);
     // Called with title 'Profile Not Found' and some content
-    expect(viewService.renderWithLayout).toHaveBeenCalledWith(
+    expect(viewService.renderWithLayout).toHaveBeenLastCalledWith(
       'Profile Not Found',
       expect.any(String),
+      undefined,
+      false,
     );
   });
 
