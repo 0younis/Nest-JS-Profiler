@@ -5,17 +5,17 @@
   "author": "Mohamed Raslan",
   "private": false,
   "license": "MIT",
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/nestjs-profiler/index.js",
+  "types": "./dist/nestjs-profiler/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "require": "./index.js",
-      "import": "./index.js"
+      "types": "./dist/nestjs-profiler/index.d.ts",
+      "require": "./dist/nestjs-profiler/index.js",
+      "import": "./dist/nestjs-profiler/index.js"
     }
   },
   "files": [
-    "dist/libs/nestjs-profiler",
+    "dist/nestjs-profiler",
     "README.md",
     "LICENSE"
   ],
@@ -25,6 +25,7 @@
     "build:lib": "rm -rf dist && tsc -p libs/nestjs-profiler/tsconfig.lib.json && cp libs/nestjs-profiler/package.json dist/nestjs-profiler/ && cp README.md dist/nestjs-profiler/ && mkdir -p dist/nestjs-profiler/assets dist/nestjs-profiler/views && cp -r libs/nestjs-profiler/src/assets/* dist/nestjs-profiler/assets/ && cp -r libs/nestjs-profiler/src/views/* dist/nestjs-profiler/views/ && mv dist/nestjs-profiler/src/* dist/nestjs-profiler/ 2>/dev/null || true && rm -rf dist/nestjs-profiler/src",
     "deploy": "npm run build:lib && cd dist/nestjs-profiler && npm publish",
     "prepublishOnly": "npm run build:lib",
+    "prepare": "npm run build:lib",
     "format": "prettier --write \"{src,apps,libs,test}/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch --exec \"node --expose-gc\"",
@@ -103,14 +104,14 @@
     "testEnvironment": "node"
   },
   "peerDependencies": {
-    "@nestjs/cache-manager": "^3.1.2",
-    "@nestjs/common": "^11.1.26",
-    "@nestjs/core": "^11.1.26",
+    "@nestjs/cache-manager": ">=2.0.0",
+    "@nestjs/common": "^9.0.0 || ^10.0.0 || ^11.0.0",
+    "@nestjs/core": "^9.0.0 || ^10.0.0 || ^11.0.0",
     "cache-manager": ">=5.0.0",
     "mongodb": ">=4.0.0",
-    "mysql2": "^3.23.3",
-    "pg": "^8.21.0",
-    "rxjs": "^7.8.2"
+    "mysql2": ">=2.0.0",
+    "pg": ">=8.0.0",
+    "rxjs": ">=7.0.0"
   },
   "peerDependenciesMeta": {
     "pg": {
