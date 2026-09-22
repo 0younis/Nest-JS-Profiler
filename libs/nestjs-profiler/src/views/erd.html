@@ -629,7 +629,7 @@ function setErdBtnLoading(loading) {
 async function refreshErd() {
   setErdBtnLoading(true);
   try {
-    const res = await fetch('/__profiler/api/erd');
+    const res = await fetch('__profiler/api/erd');
     const fresh = await res.json();
 
     if (!document.getElementById('schema-panels')) return;

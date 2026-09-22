@@ -603,7 +603,7 @@
   // ── Auto-refresh ────────────────────────────────────────────────────────────
 
   function refresh() {
-    fetch('/__profiler/api/cron-jobs')
+    fetch('__profiler/api/cron-jobs')
       .then(function(r) { return r.json(); })
       .then(function(d) { render(d); })
       .catch(function() {});

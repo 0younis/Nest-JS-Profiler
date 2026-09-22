@@ -33,8 +33,9 @@
           );
 
         // Check match
-        const href = link.getAttribute('href');
-        if (href === path) {
+        const href = new URL(link.href).pathname;
+        const target = new URL(path, location.href).pathname;
+        if (href === target) {
           link.className =
             'flex items-center px-2 py-2 text-sm font-medium rounded-md group bg-indigo-600 text-white';
           if (svg)
