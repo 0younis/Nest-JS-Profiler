@@ -25,7 +25,6 @@
     "build:lib": "rm -rf dist && tsc -p libs/nestjs-profiler/tsconfig.lib.json && cp libs/nestjs-profiler/package.json dist/nestjs-profiler/ && cp README.md dist/nestjs-profiler/ && mkdir -p dist/nestjs-profiler/assets dist/nestjs-profiler/views && cp -r libs/nestjs-profiler/src/assets/* dist/nestjs-profiler/assets/ && cp -r libs/nestjs-profiler/src/views/* dist/nestjs-profiler/views/ && mv dist/nestjs-profiler/src/* dist/nestjs-profiler/ 2>/dev/null || true && rm -rf dist/nestjs-profiler/src",
     "deploy": "npm run build:lib && cd dist/nestjs-profiler && npm publish",
     "prepublishOnly": "npm run build:lib",
-    "prepare": "npm run build:lib",
     "format": "prettier --write \"{src,apps,libs,test}/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch --exec \"node --expose-gc\"",
@@ -49,9 +48,6 @@
     "telescope",
     "profiler"
   ],
-  "dependencies": {
-    "cache-manager": "^5.0.0"
-  },
   "devDependencies": {
     "@nestjs/axios": "^4.0.1",
     "@nestjs/event-emitter": "^3.1.0",
