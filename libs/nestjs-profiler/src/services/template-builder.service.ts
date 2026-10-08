@@ -150,7 +150,7 @@ export class TemplateBuilderService {
                     (e) => `
                     <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3">
-                            <a href="/__profiler/view/requests?search=${encodeURIComponent(e.route)}" class="group inline-flex items-center gap-1.5 hover:underline">
+                            <a href="__profiler/view/requests?search=${encodeURIComponent(e.route)}" class="group inline-flex items-center gap-1.5 hover:underline">
                                 <span class="inline-block text-xs font-semibold px-1.5 py-0.5 rounded ${this.getMethodBadgeClass(e.method)}">${e.method}</span>
                                 <span class="font-mono text-xs text-gray-700 group-hover:text-indigo-600 truncate">${e.route}</span>
                             </a>
@@ -208,7 +208,7 @@ export class TemplateBuilderService {
                         (e) => `
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-3">
-                                <a href="/__profiler/${e.id}" class="group inline-flex items-center gap-1.5 hover:underline">
+                                <a href="__profiler/${e.id}" class="group inline-flex items-center gap-1.5 hover:underline">
                                     <span class="inline-block text-xs font-semibold px-1.5 py-0.5 rounded ${this.getMethodBadgeClass(e.method)}">${e.method}</span>
                                     <span class="font-mono text-xs text-gray-700 group-hover:text-indigo-600">${e.url}</span>
                                 </a>
@@ -656,7 +656,7 @@ export class TemplateBuilderService {
       previousPage:
         currentPage > 1
           ? `
-                <a href="/__profiler/view/logs?page=${currentPage - 1}" class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <a href="__profiler/view/logs?page=${currentPage - 1}" class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                     Previous
                 </a>
             `
@@ -668,7 +668,7 @@ export class TemplateBuilderService {
       nextPage:
         currentPage < totalPages
           ? `
-                <a href="/__profiler/view/logs?page=${currentPage + 1}" class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <a href="__profiler/view/logs?page=${currentPage + 1}" class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                     Next
                 </a>
             `
@@ -731,7 +731,7 @@ export class TemplateBuilderService {
                     <span class="text-sm ${durationClass}">${c.duration}ms</span>
                 </td>
                 <td class="p-3 whitespace-nowrap">
-                    <a href="/__profiler/${c.requestId}" class="text-xs text-indigo-600 hover:underline font-mono truncate block max-w-[140px]" title="${c.requestUrl}">
+                    <a href="__profiler/${c.requestId}" class="text-xs text-indigo-600 hover:underline font-mono truncate block max-w-[140px]" title="${c.requestUrl}">
                         ${c.requestMethod} ${c.requestUrl}
                     </a>
                 </td>

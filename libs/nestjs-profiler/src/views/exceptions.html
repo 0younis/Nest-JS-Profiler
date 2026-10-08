@@ -266,7 +266,7 @@ function selectException(requestId) {
 
   html +=
     '<div class="pt-1">' +
-      '<a href="/__profiler/' + escapeHtml(exc.requestId) + '" target="_blank" ' +
+      '<a href="__profiler/' + escapeHtml(exc.requestId) + '" target="_blank" ' +
         'class="inline-flex items-center gap-2 w-full justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">' +
         '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">' +
           '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>' +
@@ -292,7 +292,7 @@ async function loadExceptions() {
   document.getElementById('exc-stats').style.display = 'none';
 
   try {
-    var r = await fetch('/__profiler/api/exceptions');
+    var r = await fetch('__profiler/api/exceptions');
     var data = await r.json();
     _allExceptions = data || [];
 

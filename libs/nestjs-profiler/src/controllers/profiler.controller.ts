@@ -52,7 +52,7 @@ export class ProfilerController {
 
   @Get()
   async dashboard(@Res() res: Response) {
-    res.redirect('/__profiler/view/summary');
+    return this.summary(res);
   }
 
   @Get('view/requests')
@@ -105,7 +105,7 @@ export class ProfilerController {
     @Query('returnTo') returnTo?: string,
   ) {
     const html = this.viewService.render('login', {
-      returnTo: returnTo || '/__profiler',
+      returnTo: returnTo || '__profiler',
     });
     res.header('Content-Type', 'text/html');
     res.send(html);
@@ -143,7 +143,7 @@ export class ProfilerController {
   @Get('logout')
   async logout(@Res() res: Response) {
     const html = `<!DOCTYPE html><html><head><title>Signing out…</title>
-<script>try{localStorage.removeItem('__profiler_auth');}catch(e){}window.location.replace('/__profiler/login');</script>
+<script>try{localStorage.removeItem('__profiler_auth');}catch(e){}window.location.replace(location.pathname.replace('/logout', '/login'));</script>
 </head><body></body></html>`;
     res.header('Content-Type', 'text/html').send(html);
   }

@@ -439,7 +439,7 @@
     window.__profilerHealthAbort = controller;
 
     try {
-      const url  = force ? '/__profiler/api/health?force=true' : '/__profiler/api/health';
+      const url  = force ? '__profiler/api/health?force=true' : '__profiler/api/health';
       const res  = await fetch(url, { signal: controller.signal });
       const data = await res.json();
 

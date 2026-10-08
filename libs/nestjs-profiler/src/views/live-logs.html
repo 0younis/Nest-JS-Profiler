@@ -292,7 +292,7 @@
 
     const dot        = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
-    const es         = new EventSource('/__profiler/logs/stream');
+    const es         = new EventSource('__profiler/logs/stream');
     window.__profilerLogES = es;
 
     es.onopen = () => {

@@ -322,7 +322,7 @@
     badge.textContent = 'refresh in ' + countdown + ' s';
     if (countdown <= 0) {
       countdown = 15;
-      fetch('/__profiler/api/memory')
+      fetch('__profiler/api/memory')
         .then(r => r.json())
         .then(data => render(data))
         .catch(() => {});
@@ -331,13 +331,13 @@
 
   // ── GC button ────────────────────────────────────────────────────────────────
   document.getElementById('btnGc').addEventListener('click', () => {
-    fetch('/__profiler/api/memory/gc', { method: 'POST' })
+    fetch('__profiler/api/memory/gc', { method: 'POST' })
       .then(r => r.json())
       .then(d => {
         toast(d.message, d.success ? '#059669' : '#dc2626');
         if (d.success) {
           setTimeout(() => {
-            fetch('/__profiler/api/memory').then(r => r.json()).then(render);
+            fetch('__profiler/api/memory').then(r => r.json()).then(render);
           }, 500);
         }
       })
@@ -350,7 +350,7 @@
     btn.disabled = true;
     btn.textContent = 'Generating…';
 
-    fetch('/__profiler/api/memory/snapshot', { method: 'POST' })
+    fetch('__profiler/api/memory/snapshot', { method: 'POST' })
       .then(res => {
         if (!res.ok) return res.json().then(d => Promise.reject(d.message || 'Snapshot failed'));
         const cd = res.headers.get('Content-Disposition') || '';

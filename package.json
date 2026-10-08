@@ -5,17 +5,17 @@
   "author": "Mohamed Raslan",
   "private": false,
   "license": "MIT",
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/nestjs-profiler/index.js",
+  "types": "./dist/nestjs-profiler/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
-      "require": "./index.js",
-      "import": "./index.js"
+      "types": "./dist/nestjs-profiler/index.d.ts",
+      "require": "./dist/nestjs-profiler/index.js",
+      "import": "./dist/nestjs-profiler/index.js"
     }
   },
   "files": [
-    "dist/libs/nestjs-profiler",
+    "dist/nestjs-profiler",
     "README.md",
     "LICENSE"
   ],
@@ -48,15 +48,13 @@
     "telescope",
     "profiler"
   ],
-  "dependencies": {
+  "devDependencies": {
     "@nestjs/axios": "^4.0.1",
     "@nestjs/event-emitter": "^3.1.0",
     "@nestjs/platform-express": "^11.1.26",
     "@nestjs/schedule": "^6.1.3",
     "axios": "^1.18.1",
-    "reflect-metadata": "^0.2.2"
-  },
-  "devDependencies": {
+    "reflect-metadata": "^0.2.2",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
@@ -103,14 +101,14 @@
     "testEnvironment": "node"
   },
   "peerDependencies": {
-    "@nestjs/cache-manager": "^3.1.2",
-    "@nestjs/common": "^11.1.26",
-    "@nestjs/core": "^11.1.26",
+    "@nestjs/cache-manager": ">=2.0.0",
+    "@nestjs/common": "^9.0.0 || ^10.0.0 || ^11.0.0",
+    "@nestjs/core": "^9.0.0 || ^10.0.0 || ^11.0.0",
     "cache-manager": ">=5.0.0",
     "mongodb": ">=4.0.0",
-    "mysql2": "^3.23.3",
-    "pg": "^8.21.0",
-    "rxjs": "^7.8.2"
+    "mysql2": ">=2.0.0",
+    "pg": ">=8.0.0",
+    "rxjs": ">=7.0.0"
   },
   "peerDependenciesMeta": {
     "pg": {

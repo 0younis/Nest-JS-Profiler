@@ -2,6 +2,15 @@
 <html lang="en" class="h-full bg-gray-50">
 
 <head>
+    <script>
+    (function () {
+        var marker = '/__profiler';
+        var index = location.pathname.lastIndexOf(marker);
+        var base = document.createElement('base');
+        base.href = index < 0 ? '/' : location.pathname.slice(0, index + 1);
+        document.head.appendChild(base);
+    })();
+    </script>
     <!-- Auth guard — runs synchronously before anything else renders.
          authEnabled is injected server-side; token is stored in localStorage. -->
     <script>
@@ -12,14 +21,14 @@
         if (!data || !data.expiresAt || Date.now() > data.expiresAt) {
             localStorage.removeItem('__profiler_auth');
             var returnTo = encodeURIComponent(location.pathname + location.search);
-            location.replace('/__profiler/login?returnTo=' + returnTo);
+            location.replace('__profiler/login?returnTo=' + returnTo);
         }
     })();
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{{ title }}} - NestJS Profiler</title>
-    <link rel="icon" type="image/x-icon" href="/__profiler/assets/favicon.ico?v=1">
+    <link rel="icon" type="image/x-icon" href="__profiler/assets/favicon.ico?v=1">
     <!-- Tailwind CSS from CDN for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -99,13 +108,13 @@
         <!-- Sidebar -->
         <div class="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col fixed h-full inset-y-0 z-10">
             <div class="flex items-center px-6 h-16 bg-slate-800">
-                <a href="/__profiler" class="flex items-center gap-3">
-                    <img src="/__profiler/assets/logo.png" alt="NestJS Profiler" class="h-8 w-auto">
+                <a href="__profiler" class="flex items-center gap-3">
+                    <img src="__profiler/assets/logo.png" alt="NestJS Profiler" class="h-8 w-auto">
                     <span class="text-white font-bold text-lg tracking-tight">NestJS Profiler</span>
                 </a>
             </div>
             <nav class="flex-1 px-4 py-6 space-y-1">
-                <a href="/__profiler/view/summary"
+                <a href="__profiler/view/summary"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ summaryActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ summaryIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -114,7 +123,7 @@
                     </svg>
                     Summary
                 </a>
-                <a href="/__profiler/view/requests"
+                <a href="__profiler/view/requests"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ requestsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ requestsIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -123,7 +132,7 @@
                     </svg>
                     Requests
                 </a>
-                <a href="/__profiler/view/queries"
+                <a href="__profiler/view/queries"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ queriesActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ queriesIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -132,7 +141,7 @@
                     </svg>
                     Database (Queries)
                 </a>
-                <a href="/__profiler/view/logs"
+                <a href="__profiler/view/logs"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ logsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ logsIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -141,7 +150,7 @@
                     </svg>
                     Logs
                 </a>
-                <a href="/__profiler/view/entities"
+                <a href="__profiler/view/entities"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ entitiesActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ entitiesIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -150,7 +159,7 @@
                     </svg>
                     Entities
                 </a>
-                <a href="/__profiler/view/routes"
+                <a href="__profiler/view/routes"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ routesActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ routesIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -159,7 +168,7 @@
                     </svg>
                     Routes
                 </a>
-                <a href="/__profiler/view/cache"
+                <a href="__profiler/view/cache"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ cacheActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ cacheIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -168,7 +177,7 @@
                     </svg>
                     Cache
                 </a>
-                <a href="/__profiler/view/events"
+                <a href="__profiler/view/events"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ eventsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ eventsIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -177,7 +186,7 @@
                     </svg>
                     Events
                 </a>
-                <a href="/__profiler/view/http-calls"
+                <a href="__profiler/view/http-calls"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ httpCallsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ httpCallsIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -186,7 +195,7 @@
                     </svg>
                     HTTP Calls
                 </a>
-                <a href="/__profiler/view/health"
+                <a href="__profiler/view/health"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ healthActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ healthIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -195,7 +204,7 @@
                     </svg>
                     Health
                 </a>
-                <a href="/__profiler/view/code-quality"
+                <a href="__profiler/view/code-quality"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ codeQualityActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ codeQualityIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -204,7 +213,7 @@
                     </svg>
                     Code Quality
                 </a>
-                <a href="/__profiler/view/cron-jobs"
+                <a href="__profiler/view/cron-jobs"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ cronJobsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ cronJobsIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -213,7 +222,7 @@
                     </svg>
                     Cron Jobs
                 </a>
-                <a href="/__profiler/view/memory"
+                <a href="__profiler/view/memory"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ memoryActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ memoryIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -222,7 +231,7 @@
                     </svg>
                     Memory
                 </a>
-                <a href="/__profiler/view/erd"
+                <a href="__profiler/view/erd"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ erdActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ erdIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -231,7 +240,7 @@
                     </svg>
                     ERD
                 </a>
-                <a href="/__profiler/view/exceptions"
+                <a href="__profiler/view/exceptions"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ exceptionsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ exceptionsIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -240,7 +249,7 @@
                     </svg>
                     Exceptions
                 </a>
-                <a href="/__profiler/view/logs/live"
+                <a href="__profiler/view/logs/live"
                     class="flex items-center px-2 py-2 text-sm font-medium rounded-md group {{{ liveLogsActive }}}">
                     <svg class="mr-3 flex-shrink-0 h-6 w-6 {{{ liveLogsIconClass }}}" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -258,7 +267,7 @@
                         <p class="text-xs font-medium text-slate-300">nestjs-profiler</p>
                     </div>
                 </div>
-                <script>if('{{ authEnabled }}'==='true'){document.write('<a href="/__profiler/logout" title="Sign out" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg></a>');}</script>
+                <script>if('{{ authEnabled }}'==='true'){document.write('<a href="__profiler/logout" title="Sign out" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg></a>');}</script>
             </div>
         </div>
 
@@ -308,8 +317,9 @@
                             if (svg) svg.setAttribute('class', 'mr-3 flex-shrink-0 h-6 w-6 text-slate-400 group-hover:text-white');
 
                             // Check match
-                            const href = link.getAttribute('href');
-                            if (href === path) {
+                            const href = new URL(link.href).pathname;
+                            const target = new URL(path, location.href).pathname;
+                            if (href === target) {
                                 link.className = 'flex items-center px-2 py-2 text-sm font-medium rounded-md group bg-indigo-600 text-white';
                                 if (svg) svg.setAttribute('class', 'mr-3 flex-shrink-0 h-6 w-6 text-indigo-300');
                             }

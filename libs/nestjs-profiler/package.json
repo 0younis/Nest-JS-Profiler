@@ -5,7 +5,6 @@
     "author": "Mohamed Raslan",
     "main": "./index.js",
     "types": "./index.d.ts",
-    "dependencies": {},
     "license": "MIT",
     "readme": "README.md",
     "keywords": [
@@ -64,6 +63,9 @@
         "cache-manager": ">=5.0.0"
     },
     "peerDependenciesMeta": {
+        "pg": {
+            "optional": true
+        },
         "mongodb": {
             "optional": true
         },
@@ -77,11 +79,8 @@
             "optional": true
         }
     },
-    "dependencies": {
-        "cache-manager": "^5.0.0"
-    },
     "devDependencies": {
-        "@nestjs/cache-manager": "^2.0.0",
-        "cache-manager": "^5.0.0"
+        "@nestjs/cache-manager": "^3.1.2",
+        "cache-manager": "^7.2.8"
     }
 }

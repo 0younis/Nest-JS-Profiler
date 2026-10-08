@@ -555,7 +555,7 @@
     window.__cqAbort = ctrl;
 
     try {
-      const url  = force ? '/__profiler/api/code-quality?force=true' : '/__profiler/api/code-quality';
+      const url  = force ? '__profiler/api/code-quality?force=true' : '__profiler/api/code-quality';
       const res  = await fetch(url, { signal: ctrl.signal });
       const data = await res.json();
       window.__cqCache = data;

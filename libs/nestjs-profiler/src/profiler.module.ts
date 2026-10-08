@@ -199,8 +199,9 @@ export class ProfilerModule implements NestModule {
         Object.getOwnPropertyNames(proto).forEach((methodKey) => {
           if (methodKey === 'constructor') return;
           try {
-            const method = proto[methodKey];
-            if (typeof method !== 'function') return;
+            const descriptor = Object.getOwnPropertyDescriptor(proto, methodKey);
+            if (!descriptor || typeof descriptor.value !== 'function') return;
+            const method = descriptor.value;
             const meta = Reflect.getMetadata(EVENT_LISTENER_METADATA, method);
             if (!meta) return;
 
