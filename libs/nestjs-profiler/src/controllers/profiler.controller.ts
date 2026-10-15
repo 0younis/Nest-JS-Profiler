@@ -25,6 +25,12 @@ import { MemoryService } from '../services/memory.service';
 import { ErdService } from '../services/erd.service';
 import { ProfilerOptions } from '../common/profiler-options.interface';
 import { createHmac } from 'crypto';
+import {
+  buildSessionCookie,
+  clearSessionCookie,
+  isSecureRequest,
+  verifySessionCookie,
+} from '../middleware/profiler-auth.middleware';
 
 @Controller('__profiler')
 export class ProfilerController {
@@ -52,7 +58,7 @@ export class ProfilerController {
 
   @Get()
   async dashboard(@Res() res: Response) {
-    res.redirect('/__profiler/view/summary');
+    return this.summary(res);
   }
 
   @Get('view/requests')
@@ -101,11 +107,20 @@ export class ProfilerController {
 
   @Get('login')
   async loginPage(
+    @Req() req: Request,
     @Res() res: Response,
     @Query('returnTo') returnTo?: string,
   ) {
+    const auth = this.profilerOptions?.auth;
+    // The login page may skip straight to returnTo only when the server agrees
+    // the session is valid — otherwise a stale localStorage token would loop.
+    const sessionValid =
+      !auth || auth.enabled !== true
+        ? true
+        : verifySessionCookie(req?.headers?.cookie, auth.username, auth.password);
     const html = this.viewService.render('login', {
-      returnTo: returnTo || '/__profiler',
+      returnTo: returnTo || '__profiler',
+      sessionValid: sessionValid ? 'true' : 'false',
     });
     res.header('Content-Type', 'text/html');
     res.send(html);
@@ -114,6 +129,7 @@ export class ProfilerController {
   /** JSON API — called by the login page via fetch(). Returns token on success. */
   @Post('api/login')
   async apiLogin(
+    @Req() req: Request,
     @Res() res: Response,
     @Body() body: { username?: string; password?: string },
   ) {
@@ -133,17 +149,24 @@ export class ProfilerController {
       const token = createHmac('sha256', auth.password)
         .update(`${auth.username}:${expiresAt}`)
         .digest('hex');
+      res.setHeader(
+        'Set-Cookie',
+        buildSessionCookie(auth.username, auth.password, { secure: isSecureRequest(req) }),
+      );
       res.json({ token, expiresAt, username: auth.username });
     } else {
       res.status(HttpStatus.UNAUTHORIZED).json({ error: 'Invalid username or password.' });
     }
   }
 
-  /** Clears the localStorage token client-side and redirects to login. */
+  /** Clears the session cookie and the localStorage token, then redirects to login. */
   @Get('logout')
-  async logout(@Res() res: Response) {
+  async logout(@Req() req: Request, @Res() res: Response) {
+    if (this.authEnabled) {
+      res.setHeader('Set-Cookie', clearSessionCookie({ secure: isSecureRequest(req) }));
+    }
     const html = `<!DOCTYPE html><html><head><title>Signing out…</title>
-<script>try{localStorage.removeItem('__profiler_auth');}catch(e){}window.location.replace('/__profiler/login');</script>
+<script>try{localStorage.removeItem('__profiler_auth');}catch(e){}window.location.replace(location.pathname.replace('/logout', '/login'));</script>
 </head><body></body></html>`;
     res.header('Content-Type', 'text/html').send(html);
   }

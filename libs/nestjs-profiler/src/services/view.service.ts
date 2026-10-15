@@ -2,6 +2,36 @@ import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 
+let cachedPackageVersion: string | undefined;
+
+/**
+ * Find the nestjs-profiler package version by walking up from this file to
+ * the nearest package.json named "nestjs-profiler". Computed once and cached.
+ */
+function getPackageVersion(): string {
+  if (cachedPackageVersion !== undefined) return cachedPackageVersion;
+  cachedPackageVersion = '';
+  let dir = __dirname;
+  for (let i = 0; i < 6; i++) {
+    const pkgPath = path.join(dir, 'package.json');
+    try {
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        if (pkg && pkg.name === 'nestjs-profiler' && pkg.version) {
+          cachedPackageVersion = String(pkg.version);
+          break;
+        }
+      }
+    } catch {
+      // ignore unreadable or invalid package.json and keep walking up
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return cachedPackageVersion;
+}
+
 @Injectable()
 export class ViewService {
   private readonly viewsPath: string;
@@ -51,9 +81,12 @@ export class ViewService {
         ? 'text-indigo-300'
         : 'text-slate-400 group-hover:text-white';
 
+    const version = getPackageVersion();
+
     const data = {
       title,
       content,
+      versionLabel: version ? `v${version}` : '',
       activeTab,
       authEnabled: authEnabled ? 'true' : 'false',
       activeClass: 'bg-indigo-600 text-white',

@@ -1,14 +1,45 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
-  <!-- If already authenticated, skip login immediately -->
   <script>
   (function () {
+    var marker = '/__profiler';
+    var index = location.pathname.lastIndexOf(marker);
+    var base = document.createElement('base');
+    base.href = index < 0 ? '/' : location.pathname.slice(0, index + 1);
+    document.head.appendChild(base);
+  })();
+  </script>
+  <!-- returnTo validation: only same-origin paths inside the dashboard are
+       allowed. The result is re-based onto this page's own path prefix, so it
+       also works behind a gateway prefix (e.g. /api/gw/__profiler/login). -->
+  <script>
+  window.__profilerSafeReturnTo = function (raw) {
+    var marker = /\/__profiler(?=\/|$)/;
+    var here = location.pathname;
+    var hereMatch = marker.exec(here);
+    // Collapse leading slashes so a "//host" prefix can never become protocol-relative
+    var prefix = (hereMatch ? here.slice(0, hereMatch.index) : '').replace(/^\/+/, '/');
+    var fallback = prefix + '/__profiler';
+    if (typeof raw !== 'string' || raw.charAt(0) !== '/' || raw.charAt(1) === '/') return fallback;
+    if (/[\\\u0000-\u001f\u007f]/.test(raw)) return fallback;
+    var url;
+    try { url = new URL(raw, location.origin); } catch (e) { return fallback; }
+    if (url.origin !== location.origin) return fallback;
+    var m = marker.exec(url.pathname);
+    if (!m) return fallback;
+    return prefix + url.pathname.slice(m.index) + url.search + url.hash;
+  };
+  </script>
+  <!-- If already authenticated (server session + local token), skip login immediately -->
+  <script>
+  (function () {
+    var sessionValid = {{{ sessionValid }}};
     var stored, data;
     try { stored = localStorage.getItem('__profiler_auth'); data = stored ? JSON.parse(stored) : null; } catch (e) { data = null; }
-    if (data && data.expiresAt && Date.now() < data.expiresAt) {
+    if (sessionValid && data && data.expiresAt && Date.now() < data.expiresAt) {
       var params = new URLSearchParams(location.search);
-      location.replace(params.get('returnTo') || '/__profiler');
+      location.replace(window.__profilerSafeReturnTo(params.get('returnTo')));
     }
   })();
   </script>
@@ -173,7 +204,7 @@
 
   <script>
   (function () {
-    var returnTo = (new URLSearchParams(location.search)).get('returnTo') || '/__profiler';
+    var returnTo = window.__profilerSafeReturnTo((new URLSearchParams(location.search)).get('returnTo'));
 
     // ── Toggle password visibility ──────────────────────────────────────────
     var pwdInput   = document.getElementById('password');
@@ -232,7 +263,7 @@
 
       setLoading(true);
 
-      fetch('/__profiler/api/login', {
+      fetch('__profiler/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username, password: password }),
