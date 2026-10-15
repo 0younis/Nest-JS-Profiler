@@ -9,3 +9,6 @@ src/demo/
 
 # Claude Code config (local only)
 .claude/
+
+# macOS Finder metadata
+.DS_Store
