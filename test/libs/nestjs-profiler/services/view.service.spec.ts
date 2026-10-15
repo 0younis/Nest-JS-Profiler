@@ -1,5 +1,7 @@
 import { ViewService } from '../../../../libs/nestjs-profiler/src/services/view.service';
 import { runInNewContext } from 'vm';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 describe('ViewService', () => {
   let svc: ViewService;
@@ -46,6 +48,18 @@ describe('ViewService', () => {
       },
     });
     expect(href).toBe(expected);
+  });
+
+  it('renderWithLayout shows the package version from package.json', () => {
+    const { version } = JSON.parse(
+      readFileSync(
+        join(__dirname, '../../../../libs/nestjs-profiler/package.json'),
+        'utf-8',
+      ),
+    );
+    const html = svc.renderWithLayout('T', '');
+    expect(html).toContain(`v${version}`);
+    expect(html).not.toContain('v1.0.29');
   });
 
   it('uses base-relative login targets', () => {
