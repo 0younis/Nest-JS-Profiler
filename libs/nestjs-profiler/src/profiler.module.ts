@@ -29,6 +29,10 @@ import { RequestProfilerInterceptor } from './interceptors/request-profiler.inte
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ProfilerLogger } from './profiler-logger';
 import { ProfilerMiddleware } from './middleware/profiler.middleware';
+import {
+  createProfilerAuthMiddleware,
+  setProfilerAuthOptions,
+} from './middleware/profiler-auth.middleware';
 import { CronExplorerService } from './services/cron-explorer.service';
 import { MemoryService } from './services/memory.service';
 import { ErdService } from './services/erd.service';
@@ -56,9 +60,15 @@ export class ProfilerModule implements NestModule {
       .apply(ProfilerMiddleware)
       .exclude({ path: '__profiler/(.*)', method: RequestMethod.ALL })
       .forRoutes({ path: '*', method: RequestMethod.ALL });
+
+    // Dashboard auth — guards every /__profiler route server-side.
+    // Pass-through when auth is disabled (default).
+    consumer.apply(createProfilerAuthMiddleware()).forRoutes(ProfilerController);
   }
 
   static forRoot(options: ProfilerOptions = {}): DynamicModule {
+    setProfilerAuthOptions(options);
+
     const optionsProvider: Provider = {
       provide: 'PROFILER_OPTIONS',
       useValue: options,

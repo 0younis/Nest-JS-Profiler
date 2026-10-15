@@ -19,13 +19,18 @@ export function setProfilerAuthOptions(options: ProfilerOptions): void {
 
 // ─── Cookie helpers ────────────────────────────────────────────────────────
 
-function parseCookies(cookieHeader: string | undefined): Record<string, string> {
+function parseCookies(
+    cookieHeader: string | undefined,
+): Record<string, string> {
     if (!cookieHeader) return {};
     return Object.fromEntries(
-        cookieHeader.split(';').map(pair => {
+        cookieHeader.split(';').map((pair) => {
             const idx = pair.indexOf('=');
             if (idx === -1) return [pair.trim(), ''];
-            return [pair.slice(0, idx).trim(), decodeURIComponent(pair.slice(idx + 1).trim())];
+            return [
+                pair.slice(0, idx).trim(),
+                decodeURIComponent(pair.slice(idx + 1).trim()),
+            ];
         }),
     );
 }
@@ -36,15 +41,44 @@ function signToken(username: string, expiry: number, password: string): string {
         .digest('hex');
 }
 
-export function buildSessionCookie(username: string, password: string): string {
+export interface SessionCookieOptions {
+    /** Add the `Secure` attribute (set when the dashboard is served over HTTPS). */
+    secure?: boolean;
+}
+
+// Path=/ so the cookie is still sent when the dashboard sits behind a gateway
+// path prefix (e.g. /api/gw/__profiler) that the server cannot see. The value is
+// HttpOnly + SameSite=Strict, and the profiler redacts Cookie headers in profiles.
+function cookieAttributes(
+    maxAgeSeconds: number,
+    opts: SessionCookieOptions,
+): string {
+    return `HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}${opts.secure ? '; Secure' : ''}`;
+}
+
+export function buildSessionCookie(
+    username: string,
+    password: string,
+    opts: SessionCookieOptions = {},
+): string {
     const expiry = Date.now() + SESSION_TTL_MS;
     const hmac = signToken(username, expiry, password);
     const token = encodeURIComponent(`${username}:${expiry}:${hmac}`);
-    return `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Strict; Path=/__profiler; Max-Age=${SESSION_TTL_MS / 1000}`;
+    return `${COOKIE_NAME}=${token}; ${cookieAttributes(SESSION_TTL_MS / 1000, opts)}`;
 }
 
-export function clearSessionCookie(): string {
-    return `${COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/__profiler; Max-Age=0`;
+export function clearSessionCookie(opts: SessionCookieOptions = {}): string {
+    return `${COOKIE_NAME}=; ${cookieAttributes(0, opts)}`;
+}
+
+/** True when the request reached us over HTTPS (directly or via a TLS-terminating proxy). */
+export function isSecureRequest(req: any): boolean {
+    if (req?.secure === true || req?.protocol === 'https') return true;
+    const proto = req?.headers?.['x-forwarded-proto'];
+    return (
+        typeof proto === 'string' &&
+        proto.split(',')[0].trim().toLowerCase() === 'https'
+    );
 }
 
 export function verifySessionCookie(
@@ -57,12 +91,13 @@ export function verifySessionCookie(
         const raw = cookies[COOKIE_NAME];
         if (!raw) return false;
 
+        // username may itself contain ':' — expiry and HMAC are always the last two parts
         const parts = raw.split(':');
         if (parts.length < 3) return false;
 
-        const cookieUser = parts[0];
-        const expiry = parseInt(parts[1], 10);
-        const cookieHmac = parts.slice(2).join(':');
+        const cookieHmac = parts[parts.length - 1];
+        const expiry = parseInt(parts[parts.length - 2], 10);
+        const cookieUser = parts.slice(0, -2).join(':');
 
         if (isNaN(expiry) || Date.now() > expiry) return false;
         if (cookieUser !== username) return false;
@@ -80,48 +115,109 @@ export function verifySessionCookie(
 
 // ─── Middleware factory ────────────────────────────────────────────────────
 
+const PROFILER_SEGMENT = /\/__profiler(?=\/|$)/;
+
+/**
+ * Path of the request below the `__profiler` segment, without query string.
+ * `/__profiler` → '', `/__profiler/` → '/', `/gw/__profiler/view/x?a=1` → '/view/x'.
+ * Returns null when the path does not contain a `__profiler` segment.
+ */
+export function profilerSubPath(url: string): string | null {
+    const pathname = (url || '').split('?')[0].split('#')[0];
+    const match = PROFILER_SEGMENT.exec(pathname);
+    if (!match) return null;
+    return pathname.slice(match.index + match[0].length);
+}
+
+/**
+ * Relative URL from the current request to the login page. Relative so the
+ * browser resolves it against whatever path prefix a gateway put in front.
+ */
+export function relativeLoginUrl(subPath: string): string {
+    if (subPath === '') return '__profiler/login';
+    const depth = subPath.split('/').length - 2;
+    return '../'.repeat(Math.max(depth, 0)) + 'login';
+}
+
+function isPublicPath(subPath: string): boolean {
+    return (
+        subPath === '/login' ||
+        subPath === '/login/' ||
+        subPath === '/logout' ||
+        subPath === '/api/login' ||
+        subPath.startsWith('/assets/') ||
+        subPath.startsWith('/js/')
+    );
+}
+
+function isApiRequest(subPath: string, method: string): boolean {
+    if (method !== 'GET' && method !== 'HEAD') return true;
+    return (
+        subPath.startsWith('/api/') ||
+        subPath === '/json' ||
+        subPath.endsWith('/json') ||
+        subPath.startsWith('/logs/stream') ||
+        subPath.startsWith('/debug/')
+    );
+}
+
 /**
  * Returns a plain Express middleware function that reads from the module-level
  * _authOptions variable. No parameters needed — options were set by forRoot().
+ *
+ * Without a valid session cookie, page requests are redirected to the login page
+ * and API requests get a 401 JSON response.
  */
 export function createProfilerAuthMiddleware() {
-    return function profilerAuthMiddleware(req: any, res: any, next: () => void) {
+    return function profilerAuthMiddleware(
+        req: any,
+        res: any,
+        next: () => void,
+    ) {
         const auth = _authOptions?.auth;
 
         // Auth disabled (default) — pass through
-        if (!auth || auth.enabled === false) {
+        if (!auth || auth.enabled !== true) {
             return next();
         }
 
-        const url: string = req.url || '';
+        const url: string = req.originalUrl || req.url || '';
+        const subPath = profilerSubPath(url) ?? (req.url || '').split('?')[0];
 
-        // Always allow the login page and logout endpoint (prevents redirect loops)
+        // Login page, login API, logout and static assets must stay reachable
+        if (isPublicPath(subPath)) {
+            return next();
+        }
+
         if (
-            url === '/login' ||
-            url.startsWith('/login?') ||
-            url === '/login/' ||
-            url === '/logout' ||
-            url.startsWith('/logout?')
+            verifySessionCookie(
+                req.headers?.cookie,
+                auth.username,
+                auth.password,
+            )
         ) {
             return next();
         }
 
-        // Allow static assets without auth
-        if (url.startsWith('/assets/') || url.startsWith('/js/')) {
-            return next();
+        const method = String(req.method || 'GET').toUpperCase();
+        if (isApiRequest(subPath, method)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(
+                JSON.stringify({
+                    statusCode: 401,
+                    error: 'Unauthorized',
+                    message: 'Profiler login required.',
+                }),
+            );
+            return;
         }
 
-        // Verify HMAC-signed session cookie
-        const cookieHeader: string | undefined = req.headers?.cookie;
-        const valid = verifySessionCookie(cookieHeader, auth.username, auth.password);
-
-        if (valid) {
-            return next();
-        }
-
-        // Redirect to login, preserving intended destination
-        const returnTo = encodeURIComponent(req.originalUrl || '/__profiler');
-        res.writeHead(302, { Location: `/__profiler/login?returnTo=${returnTo}` });
+        // Redirect to login, preserving the intended destination. The login page
+        // re-bases returnTo onto its own path prefix and rejects anything else.
+        const returnTo = encodeURIComponent(url || '/__profiler');
+        res.writeHead(302, {
+            Location: `${relativeLoginUrl(subPath)}?returnTo=${returnTo}`,
+        });
         res.end();
     };
 }

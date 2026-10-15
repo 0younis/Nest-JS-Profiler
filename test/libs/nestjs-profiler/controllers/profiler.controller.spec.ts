@@ -116,7 +116,7 @@ describe('ProfilerController', () => {
       routeExplorer,
     );
     const ctx = makeRes();
-    await ctrl.logout(ctx.res);
+    await ctrl.logout({ headers: {} } as any, ctx.res);
     expect(ctx.body).toContain(
       "location.pathname.replace('/logout', '/login')",
     );

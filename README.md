@@ -135,7 +135,7 @@ node --expose-gc dist/main
 ```
 
 ### Security
-- **Dashboard Authentication** — optional login wall with HMAC-SHA256 tokens stored in `localStorage`, 24-hour TTL. No separate auth server needed
+- **Dashboard Authentication** — optional login wall enforced server-side with an HMAC-SHA256 signed session cookie, 24-hour TTL. No separate auth server needed
 
 ---
 
@@ -287,17 +287,25 @@ ProfilerModule.forRoot({
 })
 ```
 
-When enabled, all `/__profiler` pages check for a valid token in `localStorage` before rendering. If none is found, the browser redirects to the login page. Tokens use HMAC-SHA256 keyed on the password and expire after 24 hours — changing the password invalidates all active sessions automatically.
+When enabled, every `/__profiler` route is guarded server-side by an HMAC-SHA256 signed session cookie (`__profiler_session`, `HttpOnly`, `SameSite=Strict`, `Secure` over HTTPS). Sessions are keyed on the password and expire after 24 hours — changing the password invalidates all active sessions automatically.
+
+- **Pages** (`/__profiler`, `/__profiler/view/*`, `/__profiler/:id`) without a valid session get a `302` to the login page, with the original URL in `returnTo`. The redirect `Location` is relative, so it works behind a gateway path prefix (e.g. `/api/gw/__profiler`).
+- **API / data routes** (`/__profiler/api/*`, `*/json`, `/__profiler/logs/stream`, any non-GET) get `401` JSON instead.
+- **Always public:** the login page, `POST api/login`, `logout`, and static `assets/*` / `js/*`.
+- After sign-in the login page only follows `returnTo` when it is a same-origin path inside the dashboard; anything else (other hosts, `//host`, `javascript:` …) falls back to the dashboard home. The path is re-based onto the prefix the login page is served under.
+- The cookie uses `Path=/` so it is still sent when a gateway adds a prefix the server cannot see. Cookie headers are redacted in recorded profiles.
+
+The dashboard UI also keeps a token in `localStorage` to show the signed-in user and the sign-out button; the server cookie is what actually grants access.
 
 TypeScript enforces that `username` and `password` are present when `enabled: true`. Omitting either is a compile-time error.
 
-> Auth is enforced client-side. It prevents casual access on shared dev/staging environments but is not a security boundary for sensitive data.
+> This is a simple shared-credential login meant for dev/staging environments. Serve the dashboard over HTTPS and don't expose it publicly in production.
 
 | Route | Purpose |
 |---|---|
 | `GET /__profiler/login` | Login page |
-| `POST /__profiler/api/login` | Validates credentials, returns a session token |
-| `GET /__profiler/logout` | Clears the token and redirects to login |
+| `POST /__profiler/api/login` | Validates credentials, sets the session cookie and returns a token |
+| `GET /__profiler/logout` | Clears the session cookie and token, then redirects to login |
 
 ---
 
