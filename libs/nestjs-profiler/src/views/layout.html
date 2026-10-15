@@ -109,7 +109,8 @@
         <div class="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col fixed h-full inset-y-0 z-10">
             <div class="flex items-center px-6 h-16 bg-slate-800">
                 <a href="__profiler" class="flex items-center gap-3">
-                    <img src="__profiler/assets/logo.png" alt="NestJS Profiler" class="h-8 w-auto">
+                    <img id="profiler-logo" alt="NestJS Profiler" class="h-8 w-auto">
+                    <script>document.getElementById('profiler-logo').src = '__profiler/assets/logo.png';</script>
                     <span class="text-white font-bold text-lg tracking-tight">NestJS Profiler</span>
                 </a>
             </div>
