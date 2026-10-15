@@ -6,3 +6,6 @@ docs
 GEMINI.md
 # Demo module (local only, not for publishing)
 src/demo/
+
+# Claude Code config (local only)
+.claude/
