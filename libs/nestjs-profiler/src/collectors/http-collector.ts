@@ -6,6 +6,7 @@ import { HttpCallProfile } from '../common/profiler.model';
 
 // Internal marker so we skip self-issued SSE/profiler requests
 const PROFILER_INTERNAL_HEADER = 'x-profiler-internal';
+const FETCH_PATCHED = Symbol.for('nestjs-profiler.fetch.patched');
 
 @Injectable()
 export class HttpCollector implements OnModuleInit {
@@ -24,7 +25,66 @@ export class HttpCollector implements OnModuleInit {
 
         this.patchModule(httpMod, 'http');
         this.patchModule(httpsMod, 'https');
-        this.logger.log('HTTP/HTTPS outbound request tracking enabled');
+        this.patchFetch();
+        this.logger.log('HTTP/HTTPS and fetch outbound request tracking enabled');
+    }
+
+    private patchFetch() {
+        if (typeof globalThis.fetch !== 'function' || (globalThis.fetch as any)[FETCH_PATCHED]) return;
+
+        const self = this;
+        const originalFetch = globalThis.fetch.bind(globalThis);
+        const patchedFetch: typeof fetch = async function (input, init) {
+            const profile = self.profiler.getCurrentProfile();
+            if (!profile) return originalFetch(input, init);
+
+            const isRequest = typeof Request !== 'undefined' && input instanceof Request;
+            const url = isRequest ? input.url : String(input);
+            const parsedUrl = new URL(url);
+
+            if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+                return originalFetch(input, init);
+            }
+
+            const headers = new Headers(init?.headers ?? (isRequest ? input.headers : undefined));
+            if (headers.has(PROFILER_INTERNAL_HEADER) || parsedUrl.pathname.includes('/__profiler')) {
+                return originalFetch(input, init);
+            }
+
+            const requestHeaders: Record<string, string> = {};
+            headers.forEach((value, key) => requestHeaders[key] = value);
+
+            const startTime = Date.now();
+            const httpCall: HttpCallProfile = {
+                method: (init?.method ?? (isRequest ? input.method : 'GET')).toUpperCase(),
+                url,
+                host: parsedUrl.host,
+                path: parsedUrl.pathname + parsedUrl.search,
+                protocol: parsedUrl.protocol === 'https:' ? 'https' : 'http',
+                startTime,
+                duration: 0,
+                requestHeaders: self.sanitiseHeaders(requestHeaders),
+            };
+
+            try {
+                const response = await originalFetch(input, init);
+                const responseHeaders: Record<string, string> = {};
+                response.headers.forEach((value, key) => responseHeaders[key] = value);
+                httpCall.statusCode = response.status;
+                httpCall.responseHeaders = self.sanitiseHeaders(responseHeaders);
+                httpCall.duration = Date.now() - startTime;
+                self.profiler.addHttpCall(httpCall);
+                return response;
+            } catch (error) {
+                httpCall.duration = Date.now() - startTime;
+                httpCall.error = error instanceof Error ? error.message : String(error);
+                self.profiler.addHttpCall(httpCall);
+                throw error;
+            }
+        };
+
+        (patchedFetch as any)[FETCH_PATCHED] = true;
+        globalThis.fetch = patchedFetch;
     }
 
     private patchModule(mod: any, protocol: 'http' | 'https') {
