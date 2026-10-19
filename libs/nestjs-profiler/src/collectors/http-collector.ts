@@ -35,56 +35,69 @@ export class HttpCollector implements OnModuleInit {
         const self = this;
         const originalFetch = globalThis.fetch.bind(globalThis);
         const patchedFetch: typeof fetch = async function (input, init) {
-            const profile = self.profiler.getCurrentProfile();
-            if (!profile) return originalFetch(input, init);
+            const httpCall = self.buildFetchCall(input, init);
+            if (!httpCall) return originalFetch(input, init);
+
+            let response: Response;
+            try {
+                response = await originalFetch(input, init);
+            } catch (error) {
+                self.recordFetchCall(httpCall, undefined, error);
+                throw error;
+            }
+
+            self.recordFetchCall(httpCall, response);
+            return response;
+        };
+
+        (patchedFetch as any)[FETCH_PATCHED] = true;
+        globalThis.fetch = patchedFetch;
+    }
+
+    private buildFetchCall(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): HttpCallProfile | undefined {
+        try {
+            if (!this.profiler.getCurrentProfile()) return;
 
             const isRequest = typeof Request !== 'undefined' && input instanceof Request;
             const url = isRequest ? input.url : String(input);
             const parsedUrl = new URL(url);
 
-            if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-                return originalFetch(input, init);
-            }
+            if (!['http:', 'https:'].includes(parsedUrl.protocol)) return;
 
             const headers = new Headers(init?.headers ?? (isRequest ? input.headers : undefined));
-            if (headers.has(PROFILER_INTERNAL_HEADER) || parsedUrl.pathname.includes('/__profiler')) {
-                return originalFetch(input, init);
-            }
+            if (headers.has(PROFILER_INTERNAL_HEADER) || parsedUrl.pathname.includes('/__profiler')) return;
 
             const requestHeaders: Record<string, string> = {};
             headers.forEach((value, key) => requestHeaders[key] = value);
 
-            const startTime = Date.now();
-            const httpCall: HttpCallProfile = {
+            return {
                 method: (init?.method ?? (isRequest ? input.method : 'GET')).toUpperCase(),
                 url,
                 host: parsedUrl.host,
                 path: parsedUrl.pathname + parsedUrl.search,
                 protocol: parsedUrl.protocol === 'https:' ? 'https' : 'http',
-                startTime,
+                startTime: Date.now(),
                 duration: 0,
-                requestHeaders: self.sanitiseHeaders(requestHeaders),
+                requestHeaders: this.sanitiseHeaders(requestHeaders),
             };
+        } catch {
+            return;
+        }
+    }
 
-            try {
-                const response = await originalFetch(input, init);
+    private recordFetchCall(httpCall: HttpCallProfile, response?: Response, error?: unknown) {
+        try {
+            httpCall.duration = Date.now() - httpCall.startTime;
+            if (response) {
                 const responseHeaders: Record<string, string> = {};
                 response.headers.forEach((value, key) => responseHeaders[key] = value);
                 httpCall.statusCode = response.status;
-                httpCall.responseHeaders = self.sanitiseHeaders(responseHeaders);
-                httpCall.duration = Date.now() - startTime;
-                self.profiler.addHttpCall(httpCall);
-                return response;
-            } catch (error) {
-                httpCall.duration = Date.now() - startTime;
+                httpCall.responseHeaders = this.sanitiseHeaders(responseHeaders);
+            } else {
                 httpCall.error = error instanceof Error ? error.message : String(error);
-                self.profiler.addHttpCall(httpCall);
-                throw error;
             }
-        };
-
-        (patchedFetch as any)[FETCH_PATCHED] = true;
-        globalThis.fetch = patchedFetch;
+            this.profiler.addHttpCall(httpCall);
+        } catch { /* profiling is best-effort; never affect the request */ }
     }
 
     private patchModule(mod: any, protocol: 'http' | 'https') {
