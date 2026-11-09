@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm test -- --runInBand
+      - run: npm run build:lib
+
+      - name: Pack installable build
+        id: package
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          npm pkg set "version=$version" --prefix dist/nestjs-profiler
+          mkdir -p release
+          asset="nestjs-profiler-$version.tgz"
+          npm pack ./dist/nestjs-profiler --pack-destination release >/dev/null
+          test -f "release/$asset"
+          echo "name=$asset" >> "$GITHUB_OUTPUT"
+          echo "path=release/$asset" >> "$GITHUB_OUTPUT"
+
+      - name: Read release version
+        id: release
+        shell: bash
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          latest="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+
+          if git rev-parse --verify --quiet "refs/tags/$tag"; then
+            echo "Release $tag already exists; skipping."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$latest" ] && [ "$(printf '%s\n' "$latest" "$tag" | sort -V | tail -n 1)" != "$tag" ]; then
+            echo "Version $tag must be newer than $latest." >&2
+            exit 1
+          else
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          ASSET_NAME: ${{ steps.package.outputs.name }}
+          ASSET_PATH: ${{ steps.package.outputs.path }}
+        run: |
+          notes="Install this release without the npm registry:
+
+          \`\`\`bash
+          npm add https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$ASSET_NAME
+          \`\`\`"
+          gh release create "$TAG" "$ASSET_PATH" --target "$GITHUB_SHA" --title "$TAG" --generate-notes --notes "$notes"
