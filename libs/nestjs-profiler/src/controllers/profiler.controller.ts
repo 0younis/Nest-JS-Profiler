@@ -23,7 +23,7 @@ import { CodeQualityService } from '../services/code-quality.service';
 import { CronExplorerService } from '../services/cron-explorer.service';
 import { MemoryService } from '../services/memory.service';
 import { ErdService } from '../services/erd.service';
-import { ProfilerOptions } from '../common/profiler-options.interface';
+import type { ProfilerOptions } from '../common/profiler-options.interface';
 import { createHmac } from 'crypto';
 
 @Controller('__profiler')

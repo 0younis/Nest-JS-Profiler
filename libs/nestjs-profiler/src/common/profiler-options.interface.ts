@@ -1,4 +1,4 @@
-import { ProfilerStorage } from '../storage/profiler-storage.interface';
+import type { ProfilerStorage } from '../storage/profiler-storage.interface';
 
 export interface ProfilerExplainOptions {
     enabled?: boolean;

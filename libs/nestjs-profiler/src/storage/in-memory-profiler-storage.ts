@@ -1,5 +1,5 @@
 import { RequestProfile } from '../common/profiler.model';
-import { ProfilerStorage } from './profiler-storage.interface';
+import type { ProfilerStorage } from './profiler-storage.interface';
 
 export class InMemoryProfilerStorage implements ProfilerStorage {
     private profiles: RequestProfile[] = [];

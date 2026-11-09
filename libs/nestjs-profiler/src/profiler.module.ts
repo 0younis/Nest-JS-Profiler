@@ -7,7 +7,7 @@ import {
   RequestMethod,
   NestModule,
 } from '@nestjs/common';
-import { ProfilerOptions } from './common/profiler-options.interface';
+import type { ProfilerOptions } from './common/profiler-options.interface';
 import { ProfilerService } from './services/profiler.service';
 import { ViewService } from './services/view.service';
 import { TemplateBuilderService } from './services/template-builder.service';

@@ -1,6 +1,6 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { ProfilerOptions } from '../common/profiler-options.interface';
+import type { ProfilerOptions } from '../common/profiler-options.interface';
 
 /** 24-hour session TTL in milliseconds */
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
